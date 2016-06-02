@@ -80,7 +80,7 @@
 
 (define presentation-text%
   (class* text%
-    (#;presenter<%>)
+    (presenter<%>)
     (init-field [presentation-context #f])
     (super-new)
     (unless presentation-context
@@ -177,11 +177,14 @@
             (define y-begin (box 0.0))
             (define x-end (box 0.0))
             (define y-end (box 0.0))
-            (send this position-location (max line-start start) x-begin y-begin #t #f)
-            (send this position-location (min line-end (+ start len)) x-end y-end #f #t)
-            (send dc draw-rectangle
-                  (+ (unbox x-begin) dx) (+ (unbox y-begin) dy)
-                  (- (unbox x-end) (unbox x-begin)) (- (unbox y-end) (unbox y-begin)))))
+            (define hl-start-pos (max line-start start))
+            (define hl-end-pos (min line-end (+ start len)))
+            (when (> hl-end-pos hl-start-pos) ;; needed to deal with newline at end of presentation
+              (send this position-location hl-start-pos x-begin y-begin #t #f)
+              (send this position-location hl-end-pos x-end y-end #f #t)
+              (send dc draw-rectangle
+                    (+ (unbox x-begin) dx) (+ (unbox y-begin) dy)
+                    (- (unbox x-end) (unbox x-begin)) (- (unbox y-end) (unbox y-begin))))))
         (send dc set-brush old-brush)
         (send dc set-pen old-pen)))
 

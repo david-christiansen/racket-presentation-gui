@@ -1,27 +1,36 @@
 #lang racket/base
 
-(require racket/gui/base racket/class racket/match racket/set)
+(require racket/gui/base racket/class racket/contract racket/match racket/set)
 (require pict)
 
 (require "../presentation.rkt")
 
-(provide img<%> circle% rectangle% pict-img% presentation-img%
+(provide img<%>
+         circle% compound-img% rectangle% pict-img% presentation-img%
          presentation-canvas%)
+
+(define (exact-ceiling n) (inexact->exact (ceiling n)))
+
+(struct pos (x y img) #:transparent)
 
 (define img<%>
   (interface ()
-    [draw (->m (is-a?/c dc<%>) real? real? void?)]
+    [draw (->m set? (is-a?/c dc<%>) real? real? void?)]
     [draw-hl (->m (is-a?/c dc<%>) real? real? void?)]
     [get-width (->m real?)]
     [get-height (->m real?)]
     [occludes? (->m real? real? boolean?)]))
+
+(define img-container<%>
+  (interface ()
+    [parts (->m (listof (and/c pos? (lambda (p) (is-a? (pos-img p) img<%>)))))]))
 
 (define circle%
   (class* object% (img<%>)
     (init-field radius [color "black"] [hl-color "red"])
     (super-new)
 
-    (define/public (draw dc x y)
+    (define/public (draw active dc x y)
       (send dc set-brush color 'opaque)
       (send dc draw-ellipse x y (* radius 2) (* radius 2)))
 
@@ -47,7 +56,7 @@
     (init-field width height [color "black"] [hl-color "red"])
     (super-new)
 
-    (define/public (draw dc x y)
+    (define/public (draw active dc x y)
       (send dc set-brush color 'opaque)
       (send dc draw-rectangle x y width height))
 
@@ -65,11 +74,53 @@
       (and (>= x 0) (<= x width)
            (>= y 0) (<= y height)))))
 
+(define compound-img%
+  (class* object% (img<%> img-container<%>)
+    ;; imgs is a list of lists (x y img)
+    (init imgs)
+    (super-new)
+
+    (define imgs/pos
+      (for/list ([i imgs])
+        (apply pos i)))
+
+    (define/public (parts)
+      imgs/pos)
+
+    (define/public (draw active dc x y)
+      (for ([img imgs/pos])
+        (if (and (is-a? (pos-img img) presentation<%>)
+                 (set-member? active (pos-img img)))
+            (send (pos-img img) draw-hl dc (+ x (pos-x img)) (+ y (pos-y img)))
+            (send (pos-img img) draw active dc (+ x (pos-x img)) (+ y (pos-y img))))))
+
+    (define/public (draw-hl dc x y)
+      (for ([img imgs/pos])
+        (match-define (pos i-x i-y i) img)
+        (send i draw-hl dc (+ x i-x) (+ y i-y))))
+
+    (define/public (get-width)
+      (apply max
+             (for/list ([img imgs/pos])
+               (match-define (pos i-x i-y i) img)
+               (+ i-x (send i get-width)))))
+
+    (define/public (get-height)
+      (apply max
+             (for/list ([img imgs/pos])
+               (match-define (pos i-x i-y i) img)
+               (+ i-y (send i get-height)))))
+
+    (define/public (occludes? x y)
+      (for/or ([img imgs/pos])
+        (match-define (pos i-x i-y i) img)
+        (send i occludes? (- x i-x) (- y i-y))))))
+
 (define pict-img%
   (class* object% (img<%>)
     (init-field pict hl-pict)
     (super-new)
-    (define/public (draw dc x y)
+    (define/public (draw active dc x y)
       (draw-pict pict dc x y))
     (define/public (draw-hl dc x y)
       (draw-pict hl-pict dc x y))
@@ -81,7 +132,8 @@
     (define crazy-color-1 (make-object color% 35 35 99 1.0))
     (define crazy-color-2 (make-object color% 35 200 200 1.0))
     (define occlusion-bitmap-dc-1
-      (let* ([bitmap-1 (make-screen-bitmap (pict-width pict) (pict-height pict))]
+      (let* ([bitmap-1 (make-screen-bitmap (exact-ceiling (pict-width pict))
+                                           (exact-ceiling (pict-height pict)))]
              [dc-1 (new bitmap-dc% [bitmap bitmap-1])])
         (send* dc-1
           (set-background crazy-color-1)
@@ -90,7 +142,8 @@
         dc-1))
 
     (define occlusion-bitmap-dc-2
-      (let* ([bitmap-2 (make-screen-bitmap (pict-width pict) (pict-height pict))]
+      (let* ([bitmap-2 (make-screen-bitmap (exact-ceiling (pict-width pict))
+                                           (exact-ceiling (pict-height pict)))]
              [dc-2 (new bitmap-dc% [bitmap bitmap-2])])
         (send* dc-2
           (set-background crazy-color-2)
@@ -100,25 +153,32 @@
 
 
     (define/public (occludes? x y)
-      (let* ([color-1 (make-object color%)]
-             [color-2 (make-object color%)]
-             [ok1 (send occlusion-bitmap-dc-1 get-pixel x y color-1)]
-             [ok2 (send occlusion-bitmap-dc-2 get-pixel x y color-2)])
-        (and ok1 ok2
-             (not (= (send color-1 red) (send crazy-color-1 red)))
-             (not (= (send color-1 green) (send crazy-color-1 green)))
-             (not (= (send color-1 blue) (send crazy-color-1 blue)))
-             (not (= (send color-2 red) (send crazy-color-2 red)))
-             (not (= (send color-2 green) (send crazy-color-2 green)))
-             (not (= (send color-2 blue) (send crazy-color-2 blue))))))))
+      (if (and (<= 0 x (get-width))
+               (<= 0 y (get-height)))
+          (let* ([color-1 (make-object color%)]
+                 [color-2 (make-object color%)]
+                 [ok1 (send occlusion-bitmap-dc-1 get-pixel x y color-1)]
+                 [ok2 (send occlusion-bitmap-dc-2 get-pixel x y color-2)])
+            (and ok1 ok2
+                 (not (= (send color-1 red) (send crazy-color-1 red)))
+                 (not (= (send color-1 green) (send crazy-color-1 green)))
+                 (not (= (send color-1 blue) (send crazy-color-1 blue)))
+                 (not (= (send color-2 red) (send crazy-color-2 red)))
+                 (not (= (send color-2 green) (send crazy-color-2 green)))
+                 (not (= (send color-2 blue) (send crazy-color-2 blue)))))
+          #f))))
 
 
 
 (define presentation-img%
-  (class* object% (img<%> presentation<%>)
+  (class* object% (img<%> img-container<%> presentation<%>)
     (init-field object modality img)
     (super-new)
-    (define/public (draw dc x y) (send img draw dc x y))
+    (define/public (parts) (list (pos 0 0 img)))
+    (define/public (draw active dc x y)
+      (if (set-member? active object)
+          (send img draw-hl dc x y)
+          (send img draw active dc x y)))
     (define/public (draw-hl dc x y) (send img draw-hl dc x y))
     (define/public (get-width) (send img get-width))
     (define/public (get-height) (send img get-height))
@@ -132,9 +192,9 @@
 (define presentation-canvas%
   (class* canvas%
     (presenter<%>)
-
+    (init [style null])
     (init-field [presentation-context #f])
-    (super-new [style '(no-autoclear)])
+    (super-new [style (cons 'no-autoclear style)])
     (unless presentation-context
       (set! presentation-context (current-presentation-context)))
     (send presentation-context register-presenter this)
@@ -153,47 +213,38 @@
 
     (define mouse-x #f)
     (define mouse-y #f)
-    (define active (mutable-seteq))
-
-    ;; A list of presented objects.  Each presented object is a list
-    ;; of a presentation type, the presented object, and its bounding
-    ;; box.
-    (define presented '())
+    (define active (seteq)) ;; The active _domain objects_ that are presented
 
     (define imgs '())
 
     (define/public (add-img img x y)
-      (set! imgs (cons (list img x y) imgs)))
+      (set! imgs (cons (pos x y img) imgs)))
 
     (define/override (on-paint)
       (send buffer-dc clear)
       (for ([img+location imgs])
-        (match-let ([(list i x y) img+location])
+        (match-let ([(pos x y i) img+location])
           (if (set-member? active i)
               (send i draw-hl buffer-dc x y)
-              (send i draw buffer-dc x y))))
+              (send i draw active buffer-dc x y))))
       (send (send this get-dc) draw-bitmap buffer 0 0)
       (void))
 
     (define/public (activate obj)
-      (let ([obj-presentations
-             (for*/seteq ([img+location imgs]
-                          [i (list (car img+location))]
-                          #:when (is-a? i presentation<%>)
-                          #:when (eq? obj (send i get-presented-object)))
-                         i)])
-        (when (not (set=? obj-presentations active))
-          (set! active obj-presentations)
-          (send this refresh))))
+      (set! active (seteq obj))
+      (send this refresh))
 
     (define/public (deactivate)
-      (set! active (mutable-seteq))
+      (set! active (seteq))
       (send this refresh))
 
     (define/public (new-context-state st)
       (void))
 
     (define (current-object)
+      (let ([o (get-current-object)])
+        o))
+    (define (get-current-object)
       (define context presentation-context)
       (define state (send context get-state))
 
@@ -205,15 +256,28 @@
           [#f #t]))
 
       (define (most-specific p1 p2)
-        (if (> (* (send p1 get-width) (send p1 get-height))
-               (* (send p2 get-width) (send p2 get-height)))
+        (if (> (* (send (car p1) get-width) (send (car p1) get-height))
+               (* (send (car p2) get-width) (send (car p2) get-height)))
             p2
             p1))
 
+      (define (get-candidates i)
+        (define (adjust-pos p)
+          (pos (+ (pos-x i) (pos-x p))
+               (+ (pos-y i) (pos-y p))
+               (pos-img p)))
+
+        (cons i
+              (if (is-a? (pos-img i) img-container<%>)
+                  (apply append (for/list ([sub (send (pos-img i) parts)])
+                                  (map adjust-pos (get-candidates sub))))
+                  null)))
+
+
       (define candidates
         (filter (lambda (x) x)
-                (for/list ([img+location imgs])
-                  (match-let ([(list i x y) img+location])
+                (for*/list ([img+location (apply append (map get-candidates imgs))])
+                  (match-let ([(pos x y i) img+location])
                     (if (and mouse-x mouse-y
                              (is-a? i presentation<%>)
                              (send i occludes? (- mouse-x x) (- mouse-y y))
@@ -222,6 +286,7 @@
                         (cons i (send i get-presented-object))
                         #f)))))
 
+
       ;; Pick the most specific activation candidate, if possible
       (if (null? candidates)
           #f
@@ -229,7 +294,7 @@
                      [remaining (cdr candidates)])
             (if (null? remaining)
                 best
-                (loop (most-specific (car best) (caar remaining))
+                (loop (most-specific best (car remaining))
                       (cdr remaining))))))
 
     (define/override (on-event ev)
@@ -243,6 +308,7 @@
       ;; Handle event logic
       (cond [(or (send ev moving?) (send ev entering?))
              (let ([obj (current-object)])
+#;               (displayln obj)
                (if obj
                    (send presentation-context make-active (cdr obj))
                    (send presentation-context nothing-active)))]
