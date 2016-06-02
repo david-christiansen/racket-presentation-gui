@@ -40,10 +40,10 @@
     [accepted (->m any/c void?)]
     [register-command-translator (->m (-> any/c
                                           any/c
-                                          (listof (list/c string? (-> any/c void?))))
+                                          (listof (list/c string? (-> void?))))
                                       void?)]
     [commands-for (->m (is-a?/c presentation<%>)
-                       (listof (list/c string? (-> any/c void?))))]))
+                       (listof (list/c string? (-> void?))))]))
 
 ;;; A presentation context manages the global application presentation
 ;;; state, including:
