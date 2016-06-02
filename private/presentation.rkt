@@ -3,7 +3,10 @@
 (require racket/gui/base)
 (require racket/class racket/contract racket/match racket/set)
 
-(provide presentation<%> simple-presentation% presenter<%> current-presentation-context)
+(provide presentation<%> simple-presentation% presenter<%>
+         presentation-context<%>
+         (contract-out [current-presentation-context
+                        (parameter/c (is-a?/c presentation-context<%>))]))
 
 (define presentation<%>
   (interface ()
@@ -26,6 +29,22 @@
     ;; Listen for state changes
     [new-context-state (->m any/c void?)]))
 
+(define presentation-context<%>
+  (interface ()
+    [get-state (->m (or/c #f
+                          (list/c 'accepting (-> any/c any/c any/c) (-> any/c void?))))]
+    [accepting? (->m boolean?)]
+    [accept (->m (-> any/c any/c any/c) (-> any/c void?) void?)]
+    [make-active (->m any/c void?)]
+    [nothing-active (->m void?)]
+    [accepted (->m any/c void?)]
+    [register-command-translator (->m (-> any/c
+                                          any/c
+                                          (listof (list/c string? (-> any/c void?))))
+                                      void?)]
+    [commands-for (->m (is-a?/c presentation<%>)
+                       (listof (list/c string? (-> any/c void?))))]))
+
 ;;; A presentation context manages the global application presentation
 ;;; state, including:
 ;;;
@@ -34,7 +53,7 @@
 ;;;
 ;;; 2. The collection of presented objects
 (define presentation-context%
-  (class object%
+  (class* object% (presentation-context<%>)
     (super-new)
     ;; The state can be:
     ;; - #f, the default state

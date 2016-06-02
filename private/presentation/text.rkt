@@ -5,7 +5,14 @@
 (require "../presentation.rkt")
 
 (provide presentation-string<%>
-         pstring pstring-append pstring-annotate
+         (contract-out
+          [pstring (-> string? (is-a?/c presentation-string<%>))]
+          [pstring-append
+           (->* () #:rest (listof (is-a?/c presentation-string<%>))
+                (is-a?/c presentation-string<%>))]
+          [pstring-annotate
+           (-> any/c any/c (is-a?/c presentation-string<%>)
+               (is-a?/c presentation-string<%>))])
          presentation-text%)
 
 (define presentation-string<%>
