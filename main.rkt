@@ -12,7 +12,7 @@
          presentation-text% presentation-string<%>
          pstring pstring-append pstring-annotate
          presentation-canvas% img<%>
-         circle% rectangle% pict-img% presentation-img%)
+         circle% rectangle% pict-img% presentation-img% compound-img%)
 
 ;; Notice
 ;; To install (from within the package directory):
