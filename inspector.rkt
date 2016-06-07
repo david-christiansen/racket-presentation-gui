@@ -3,7 +3,7 @@
 (require racket/gui framework)
 (require pict pict/shadow)
 (require "private/presentation.rkt"
-         "private/presentation/canvas.rkt"
+         "private/presentation/pict.rkt"
          "private/presentation/text.rkt")
 
 (provide gui-inspect)
@@ -13,49 +13,64 @@
 (define (exact-floor n) (inexact->exact (floor n)))
 (define (exact-ceiling n) (inexact->exact (ceiling n)))
 
-(define (present-pair pair)
-  (define box-size 30)
-  (define car-box
-    (new rectangle% [width box-size] [height box-size] [color "gray"] [hl-color "red"]))
-  (define cdr-box
-    (new rectangle% [width box-size] [height box-size] [color "gray"] [hl-color "red"]))
-  (define pair-img
-    (new compound-img%
-         [imgs `((0 0 ,car-box)
-                 (,(add1 box-size) 0 ,cdr-box))]))
-  (define car-contents (inspector-present (car pair)))
-  (define cdr-contents (inspector-present (cdr pair)))
-  (define whole-img
-    (new compound-img% [imgs `((0 0 ,pair-img)
-                               (,(exact-floor (/ box-size 2)) ,(exact-floor (+ box-size 40)) ,car-contents)
-                               (,(exact-floor (+ 40 (send car-contents get-width)))
-                                ,(exact-floor (+ box-size 40))
-                                ,cdr-contents))]))
-  (new presentation-img%
-         [object pair]
-         [modality 'value]
-         [img whole-img]))
+(define (cell-box)
+  (cc-superimpose
+   (filled-rectangle 20 20 #:draw-border? #t #:color "white")
+   (filled-ellipse 5 5 #:color "black")))
 
-(define (inspector-present obj)
-  (match obj
-    [(? pair? pair)
-     (present-pair pair)]
-    [other
-     (let* ([str (inset (text (format "~v" obj)) 5)]
-            [boxed (cc-superimpose (filled-rectangle (pict-width str) (pict-height str) #:color "white" #:border-color "black" #:draw-border? #t)
-                                   str)])
-       (new compound-img%
-            [imgs `((0 0 ,(new presentation-img%
-                               [object other]
-                               [modality 'value]
-                               [img (new pict-img%
-                                         [pict boxed]
-                                         [hl-pict (shadow boxed 20 #:shadow-color "yellow")])])))]))]))
+(define (present-value c v)
+  (cond
+    [(pair? v)
+     (define car-pict (present-value c (car v)))
+     (define cdr-pict (present-value c (cdr v)))
+     (define box-1 (cell-box))
+     (define box-2 (cell-box))
+     (define cons-cell-pict
+       (vc-append 30
+                  (hc-append box-1 box-2)
+                  (ht-append 20
+                             car-pict
+                             cdr-pict)))
+     (define with-car-arrow
+       (pin-arrow-line 5 cons-cell-pict box-1 cc-find car-pict ct-find
+                       #:end-angle (* pi 1.5)))
+     (define with-cdr-arrow
+       (pin-arrow-line 5 with-car-arrow box-2 cc-find cdr-pict ct-find
+                       #:end-angle (* pi 1.5)))
+     (send c make-presentation v 'value
+           with-cdr-arrow
+           hl)]
+    [(vector? v)
+     (define start-pict (text "#(" null 20))
+     (define end-pict (text ")" null 20))
+     (define sub-picts
+       (for/list ([cell (in-vector v)])
+         (cons (cell-box) (present-value c cell))))
+     (define contents (apply hc-append (map car sub-picts)))
+     (define no-arrows (vc-append 60
+                                  (hc-append start-pict contents end-pict)
+                                  (apply ht-append 20 (map cdr sub-picts))))
+     (send c make-presentation v 'value
+           (for/fold ([picture no-arrows])
+                     ([elem (in-list sub-picts)])
+             (pin-arrow-line 5 picture (car elem) cc-find (cdr elem) ct-find
+                             #:start-angle (* pi 1.5)
+                             #:end-angle (* pi 1.5)))
+           hl)]
+    [else (send c make-presentation v 'value
+                (let ([t (inset (text (format "~v" v) null 20) 2)])
+                  (cc-superimpose
+                   (filled-rectangle (pict-width t) (pict-height t) #:color "white")
+                   t))
+                hl)]))
+
+(define (hl p)
+  (colorize p "red"))
 
 (define (gui-inspect obj)
   (define frame (new frame% [width 400] [height 400] [label "Inspector"]))
-  (define canvas (new presentation-canvas% [parent frame] [style '(hscroll vscroll)]))
-  (send canvas add-img (inspector-present obj) 20 20)
+  (define canvas (new presentation-pict-canvas% [parent frame] [style '(hscroll vscroll)]))
+  (send canvas add-pict (present-value canvas obj) 20 20)
   (send frame show #t))
 
 (module+ main

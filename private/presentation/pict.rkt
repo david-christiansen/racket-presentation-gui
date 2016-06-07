@@ -6,6 +6,8 @@
 
 (require "../presentation.rkt")
 
+(provide presentation-pict-canvas%)
+
 (struct pos (x y pict) #:transparent)
 
 (define (exact-round n) (inexact->exact (round n)))
@@ -226,56 +228,4 @@
                (send this popup-menu menu (send ev get-x) (send ev get-y)))))]))))
 
 
-(module+ main
-  (require pict/tree-layout profile)
 
-  (define (cell-box)
-    (cc-superimpose
-     (filled-rectangle 20 20 #:draw-border? #t #:color "white")
-     (filled-ellipse 5 5 #:color "black")))
-
-  (define (hl p)
-    (colorize p "red"))
-
-  (send (current-presentation-context) register-command-translator
-        (lambda (obj mod)
-          (if (eqv? mod 'value)
-              (list (list "Dump" (lambda () (displayln obj))))
-              null)))
-  (define (go)
-    (define f (new frame% [label "hej"] [width 800] [height 600]))
-    (define c (new presentation-pict-canvas% [parent f]))
-
-
-    (define (value->tree-layout v)
-      (cond
-        [(pair? v)
-         (define car-pict (value->tree-layout (car v)))
-         (define cdr-pict (value->tree-layout (cdr v)))
-         (define box-1 (cell-box))
-         (define box-2 (cell-box))
-         (define cons-cell-pict
-           (vc-append 30
-                      (hc-append box-1 box-2)
-                      (ht-append 20
-                                 car-pict
-                                 cdr-pict)))
-         (define with-car-arrow
-           (pin-arrow-line 5 cons-cell-pict box-1 cc-find car-pict ct-find
-                           #:end-angle (* pi 1.5)))
-         (define with-cdr-arrow
-           (pin-arrow-line 5 with-car-arrow box-2 cc-find cdr-pict ct-find
-                           #:end-angle (* pi 1.5)))
-         (send c make-presentation v 'value
-               with-cdr-arrow
-               hl)]
-        [else (send c make-presentation v 'value
-                    (let ([t (inset (text (format "~v" v) null 20) 2)])
-                      (cc-superimpose
-                       (filled-rectangle (pict-width t) (pict-height t) #:color "white")
-                       t))
-                    hl)]))
-
-    (send c add-pict (value->tree-layout '((1 2) "hi" (3) (43 1 () () 2))) 30 30)
-    (send f show #t))
-  (go))

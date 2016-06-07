@@ -107,27 +107,39 @@
   (define (width str)
     (apply max (for/list ([line (string-split str "\n")])
                  (string-length line))))
+  (define (pretty-present-sequence xs start-col)
+    (define presented-xs
+      (for/list ([x xs])
+        (real-pretty-present x
+                             (+ start-col 2))))
+    (define break? (> (+ start-col
+                         (length xs)
+                         (apply + (for/list ([p presented-xs])
+                                    (send p get-length))))
+                      width-preference))
+    (define contents
+      (if break?
+          (intersperse (pstring (string-append "\n"
+                                               (build-string start-col
+                                                             (thunk* #\space))))
+                       presented-xs)
+          (intersperse (pstring " ") presented-xs)))
+    (apply pstring-append contents))
+
   (define (real-pretty-present obj start-col)
     (match obj
       [(? null? x)
        (pstring-annotate x 'value (pstring "'()"))]
       [(list xs ...)
-       (define presented-xs
-         (for/list ([x xs])
-           (real-pretty-present x
-                                (+ start-col 2))))
-       (define break? (> (+ start-col
-                            (length xs)
-                            (apply + (for/list ([p presented-xs])
-                                       (send p get-length))))
-                         width-preference))
+       (define contents (pretty-present-sequence xs (+ start-col 2)))
        (define start (pstring "'("))
        (define end (pstring ")"))
-       (define contents
-         (if break?
-             (intersperse (pstring "\n") presented-xs)
-             (intersperse (pstring " ") presented-xs)))
-       (pstring-annotate obj 'value (pstring-append start (apply pstring-append contents) end))]
+       (pstring-annotate obj 'value (pstring-append start contents end))]
+      [(vector xs ...)
+       (define contents (pretty-present-sequence xs (+ start-col 2)))
+       (define start (pstring "#("))
+       (define end (pstring ")"))
+       (pstring-annotate obj 'value (pstring-append start contents end))]
       [other (pstring-annotate obj 'value (pstring (format "~v" other)))]))
   (real-pretty-present object 0))
 
