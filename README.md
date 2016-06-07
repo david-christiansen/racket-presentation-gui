@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/david-christiansen/racket-presentation-gui.svg?branch=master)](https://travis-ci.org/david-christiansen/racket-presentation-gui)
+
 Presentations
 =============
 
