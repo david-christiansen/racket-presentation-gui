@@ -25,6 +25,8 @@ env:
     - RACKET_VERSION=6.1.1
     - RACKET_VERSION=6.2
     - RACKET_VERSION=6.3
+    - RACKET_VERSION=6.4
+    - RACKET_VERSION=6.5
     - RACKET_VERSION=HEAD
 
 matrix:
@@ -47,6 +49,7 @@ before_script:
 # packages without it getting stuck on a confirmation prompt.
 script:
  - raco pkg install --deps search-auto cover
+ - raco pkg install -n presentations
  - raco test -x -p presentations
 
 after_success:
