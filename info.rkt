@@ -4,6 +4,6 @@
                "rackunit-lib"))
 (define build-deps '("scribble-lib" "racket-doc"))
 (define scribblings '(("scribblings/presentations.scrbl" ())))
-(define pkg-desc "Description Here")
+(define pkg-desc "Presentation-based GUI widgets")
 (define version "0.0")
-(define pkg-authors '(davidchr))
+(define pkg-authors '("David Christiansen"))
