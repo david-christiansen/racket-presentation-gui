@@ -9,9 +9,69 @@
          circle% compound-img% rectangle% pict-img% presentation-img%
          presentation-canvas%)
 
+(provide blink)
+
 (define (exact-ceiling n) (inexact->exact (ceiling n)))
 
 (struct pos (x y img) #:transparent)
+
+(define (transform-rectangle dc x y w h)
+  (define mx (send dc get-initial-matrix))
+  (define-values (sx sy) (send dc get-scale))
+  (define-values (dx dy) (send dc get-origin))
+  (define r (send dc get-rotation))
+  (define p (new dc-path%))
+  (send p rectangle x y w h)
+  (send p rotate r)
+  (send p scale sx sy)
+  (send p translate dx dy)
+  (send p transform mx)
+  (send p get-bounding-box))
+
+(require (only-in pict/private/pict cons-picture*))
+(define (conditional-pict c p1 fun)
+  (match-define
+    (pict draw-1
+          width-1 height-1
+          ascent-1 descent-1
+          children-1
+          panbox-1
+          last-1)
+    p1)
+  (define (draw-fn dc dx dy)
+    (define-values (bx by bw bh) (transform-rectangle dc dx dy width-1 height-1))
+    (displayln (list bx by bw bh))
+    (if (c)
+        (draw-pict p1 dc dx dy)
+        (draw-pict (fun p1) dc dx dy)))
+  (make-pict `(prog ,draw-fn ,height-1)
+             width-1 height-1
+             ascent-1 descent-1
+             children-1
+             panbox-1
+             last-1))
+
+(define blink
+  (conditional-pict
+   (lambda () (even? (current-seconds)))
+   (filled-rectangle 20 20 #:color "red")
+   (lambda (p) (colorize p "orange"))))
+
+(define (presenting obj mod pict hl
+                    #:presentation-context [context (current-presentation-context)])
+  
+  (conditional-pict
+   (lambda () #f)
+   pict
+   hl)
+  )
+
+#;
+(define (presentation-pict object modality inactive #:active [active #f])
+  (let ([w (pict-width pict)]
+        [h (pict-height pict)])
+    (cons-picture* 
+     )))
 
 (define img<%>
   (interface ()

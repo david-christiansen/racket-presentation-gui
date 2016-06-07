@@ -90,6 +90,8 @@
   (send canvas add-img another-fish 400 400)
   (send canvas add-img more-fish 300 300)
 
+  (send canvas add-img (new pict-img% [pict (ht-append (inset blink 2) (standard-fish 10 10))] [hl-pict blink]) 20 40)
+
   ;; Text construction
   (define editor (new presentation-text% [auto-wrap #t]))
   (define editor-canvas (new editor-canvas% [parent content] [editor editor]))
