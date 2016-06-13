@@ -8,6 +8,49 @@
          (contract-out [current-presentation-context
                         (parameter/c (is-a?/c presentation-context<%>))]))
 
+(module+ test
+  (require rackunit))
+
+;;; A presentation type is an opaque object whose equality is eq?. But
+;;; the name is saved for debugging purposes.
+(struct presentation-type (name [parent #:auto])
+  #:auto-value #f
+  #:methods gen:custom-write
+  [(define (write-proc x port mode)
+     (fprintf port "#<presentation-type:~s>" (presentation-type-name x)))])
+
+;;; To define a presentation type, one must provide a PER over values
+;;; and a set datastructure that uses the PER. If no set datastructure
+;;; is provided, this slow list-based fallback is used.
+(struct slow-set (same? elems)
+  #:methods gen:set
+  [(define (set-member? st v)
+     (member v (slow-set-elems st) (slow-set-same? st)))
+   (define (set-add st v)
+     (if (member v (slow-set-elems st) (slow-set-same? st))
+         st
+         (slow-set (slow-set-same? st) (cons v (slow-set-elems st)))))
+   (define (set-remove st v)
+     (define same? (slow-set-same? st))
+     (slow-set (remove v (slow-set-elems st) same?) same?))
+   (define (set-first st)
+     (define elems (slow-set-elems st))
+     (if (null? elems)
+         (raise-argument-error 'set-first "non-empty set" st)
+         (car elems)))
+   (define (set-empty? st)
+     (null? (slow-set-elems st)))
+   (define (set-copy-clear st)
+     (slow-set (slow-set-same? st) null))
+   (define (set->list st)
+     (slow-set-elems st))])
+
+(module+ test
+  (define none (slow-set (lambda (x y) (= (string-length x) (string-length y))) null))
+  (define one (set-add none "oh"))
+  (define two (set-add one "no"))
+  (check-equal? (set->list two) '("oh")))
+
 (define presentation<%>
   (interface ()
     [get-presented-object (->m any/c)]
