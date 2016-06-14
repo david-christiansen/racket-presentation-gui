@@ -267,10 +267,7 @@
              (let ([pres (presentation-at x y)]
                    [menu (new popup-menu%)])
                (when pres
-                 (define cmds (send presentation-context commands-for
-                                    (simple-presentation
-                                     (caddr pres)
-                                     (cadddr pres))))
+                 (define cmds (send presentation-context commands-for pres))
                  (when (not (null? cmds))
                    (for ([cmd cmds])
                      (new menu-item%

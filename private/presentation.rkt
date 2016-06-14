@@ -208,7 +208,6 @@
 (define presentation-context<%>
   (interface ()
     [register-presenter (->m (is-a?/c presenter<%>) void?)]
-
     [currently-accepting (->m (or/c #f presentation-type?))]
     [accept (->i ([me any/c]
                   [p-t presentation-type?]
@@ -224,7 +223,19 @@
                    ()
                    [result any/c])]
     [make-active (->m presentation? void?)]
-    [nothing-active (->m void?)]))
+    [nothing-active (->m void?)]
+    [register-command-translator
+     (->i ([me any/c]
+           [type presentation-type?]
+           [proc (type) (-> (presentation-type/c type)
+                            (listof (list/c string?
+                                            (-> void?))))])
+          ()
+          [result void?])]
+    [commands-for
+     (->m presentation?
+          (listof (list/c string?
+                          (-> void?))))]))
 
 ;;; A presentation context manages the global application presentation
 ;;; state, including:
@@ -270,19 +281,18 @@
       (for ([p (in-set presenters)])
         (send p no-highlighting)))
 
-    ;; Presentations can be implictly considered as commands, which
-    ;; will be presented in a menu.  A presentation-to-command
-    ;; translator is a procedure that, when given a presentation
-    ;; object and modality, returns a possibly-empty list of command
-    ;; name and thunk lists.
-    (define command-translators '())
-    (define/public (register-command-translator proc)
-      (set! command-translators (append command-translators (list proc))))
-    (define/public (commands-for presentation)
-      (for*/list ([translator command-translators]
-                  [command (translator (send presentation get-presented-object)
-                                       (send presentation get-modality))])
-        command))))
+    (define command-translators (make-weak-hasheq))
+    (define/public (register-command-translator type proc)
+      (hash-update! command-translators
+                    type
+                    (lambda (old) (cons proc old))
+                    null))
+    (define/public (commands-for pres)
+      (for*/list ([tr (hash-ref command-translators
+                                (presentation-presentation-type pres)
+                                null)]
+                  [cmd (tr (presentation-value pres))])
+        cmd))))
 
 (define current-presentation-context
   (make-parameter (new presentation-context%)))

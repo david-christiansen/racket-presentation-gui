@@ -144,10 +144,9 @@
 
 (module+ main
   (send (current-presentation-context) register-command-translator
-        (lambda (obj modality)
-          (if (eqv? modality value/p)
-              (list (list "Inspect value" (thunk (gui-inspect obj))))
-              (list))))
+        value/p
+        (lambda (val)
+          (list (list "Inspect value" (thunk (gui-inspect val))))))
 
   (define (rep str)
     (with-handlers ([exn? present-exn])
