@@ -227,7 +227,10 @@
 
     (define (presentation-at x y)
       (define (smallest a b)
-        (if (< (cadr a) (cadr b)) a b))
+        (if (< (textual-presentation-len a)
+               (textual-presentation-len b))
+            a
+            b))
       (let* ([accepting (send presentation-context currently-accepting)]
              [pos (send this find-position x y)]
              [candidates

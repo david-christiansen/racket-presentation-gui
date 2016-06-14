@@ -3,7 +3,6 @@
 (require racket/gui framework)
 (require pict)
 (require "private/presentation.rkt"
-         "private/presentation/canvas.rkt"
          "private/presentation/text.rkt")
 
 (require "inspector.rkt")
@@ -129,24 +128,24 @@
   (define (real-pretty-present obj start-col)
     (match obj
       [(? null? x)
-       (pstring-annotate x 'value (pstring "'()"))]
+       (pstring-annotate x value/p (pstring "'()"))]
       [(list xs ...)
        (define contents (pretty-present-sequence xs (+ start-col 2)))
        (define start (pstring "'("))
        (define end (pstring ")"))
-       (pstring-annotate obj 'value (pstring-append start contents end))]
+       (pstring-annotate obj value/p (pstring-append start contents end))]
       [(vector xs ...)
        (define contents (pretty-present-sequence xs (+ start-col 2)))
        (define start (pstring "#("))
        (define end (pstring ")"))
-       (pstring-annotate obj 'value (pstring-append start contents end))]
-      [other (pstring-annotate obj 'value (pstring (format "~v" other)))]))
+       (pstring-annotate obj value/p (pstring-append start contents end))]
+      [other (pstring-annotate obj value/p (pstring (format "~v" other)))]))
   (real-pretty-present object 0))
 
 (module+ main
   (send (current-presentation-context) register-command-translator
         (lambda (obj modality)
-          (if (eqv? modality 'value)
+          (if (eqv? modality value/p)
               (list (list "Inspect value" (thunk (gui-inspect obj))))
               (list))))
 

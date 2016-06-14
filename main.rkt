@@ -2,7 +2,7 @@
 
 (require racket/gui framework)
 (require pict)
-(require "private/presentation.rkt" "private/presentation/canvas.rkt" "private/presentation/text.rkt")
+(require "private/presentation.rkt" "private/presentation/text.rkt")
 
 (module+ test
   (require rackunit))
@@ -10,9 +10,7 @@
 (provide presentation<%> presenter<%>
          presentation-context<%> current-presentation-context
          presentation-text% presentation-string<%>
-         pstring pstring-append pstring-annotate
-         presentation-canvas% img<%>
-         circle% rectangle% pict-img% presentation-img% compound-img%)
+         pstring pstring-append pstring-annotate)
 
 ;; Notice
 ;; To install (from within the package directory):
@@ -45,7 +43,7 @@
   ;; Tests to be run with raco test
   )
 
-
+#;
 (module+ main
   ;; The semantic domain
   (struct icthyoid (text) #:transparent)
