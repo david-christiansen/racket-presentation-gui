@@ -196,7 +196,9 @@
 
     (define/public (accepted pres)
       (match-define (cons (cons pres-type callback) todo) accepting-stack)
-      (queue-callback (lambda () (callback (presentation-value pres))))
+      (queue-callback
+       (lambda ()
+         (callback (presentation-value pres))))
       (set! accepting-stack todo))
 
     (define presenters (weak-seteq))

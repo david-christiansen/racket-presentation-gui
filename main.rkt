@@ -66,7 +66,7 @@
     (new presentation-pict-canvas% [parent content]))
 
   (define (hl p)
-    (cc-superimpose p (cellophane (scale p 1.1) 0.25)))
+    (cc-superimpose p (inset (cellophane (scale p 1.5) 0.25) -30)))
 
   (define circle
     (send canvas make-presentation 'circle not-fish/p
@@ -133,8 +133,7 @@
                             (thunk*
                              (send frame set-status-text "Accepting fish")
                              (send (current-presentation-context)
-                                   accept
-                                   (lambda (o m) (eqv? m fish/p))
+                                   accept fish/p
                                    (lambda (o)
                                      (send frame set-status-text "")
                                      (displayln o))))]))

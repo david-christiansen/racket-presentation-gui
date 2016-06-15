@@ -202,7 +202,7 @@
         [(and (send presentation-context currently-accepting) (send ev button-down?))
          (let ([p (find-current-presentation mouse-x mouse-y)])
            (when p
-             (send presentation-context accepted (pict-presentation-value p))))]
+             (send presentation-context accepted p)))]
         [(send ev button-down? 'right)
          (let ([p (find-current-presentation mouse-x mouse-y)]
                [menu (new popup-menu%)])
