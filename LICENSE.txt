@@ -1,5 +1,5 @@
 presentations
-Copyright (c) 2016 davidchr
+Copyright (c) 2016 David Christiansen
 
 This package is distributed under the GNU Lesser General Public
 License (LGPL).  This means that you can link presentations into proprietary

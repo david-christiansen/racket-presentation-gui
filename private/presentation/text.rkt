@@ -11,18 +11,23 @@
            (->* () #:rest (listof (is-a?/c presentation-string<%>))
                 (is-a?/c presentation-string<%>))]
           [pstring-annotate
-           (-> any/c any/c (is-a?/c presentation-string<%>)
-               (is-a?/c presentation-string<%>))])
+           (->i ([value (type) (presentation-type/c type)]
+                 [type presentation-type?]
+                 [str (is-a?/c presentation-string<%>)])
+                ()
+                [result (is-a?/c presentation-string<%>)])])
          presentation-text%)
+
+(struct textual-presentation (offset len value type)
+  #:property prop:presentation
+  (list (lambda (x) (textual-presentation-value x))
+        (lambda (x) (textual-presentation-type x))))
 
 (define presentation-string<%>
   (interface ()
     [get-string (->m string?)]
     [get-length (->m exact-nonnegative-integer?)]
-    [get-presentations (->m (listof (list/c exact-nonnegative-integer?
-                                            exact-nonnegative-integer?
-                                            any/c
-                                            any/c)))]))
+    [get-presentations (->m (listof textual-presentation?))]))
 
 (define presentation-string%
   (class* object%
@@ -53,8 +58,9 @@
              (for*/list ([str (in-sequences strings)])
                (define result
                  (for/list ([pres (send str get-presentations)])
-                   (match-define (list offset len object modality) pres)
-                   (list (+ offset length) len object modality)))
+                   (match-define (textual-presentation offset len object presentation-type)
+                     pres)
+                   (textual-presentation (+ offset length) len object presentation-type)))
                (set! length (+ length (string-length (send str get-string))))
                result)))))
 
@@ -62,21 +68,22 @@
   (class* object%
     (presentation-string<%>)
     (super-new)
-    (init-field string object modality)
+    (init-field string object presentation-type)
     (define len (send string get-length))
     (define/public (get-string)
       (send string get-string))
     (define/public (get-length)
       len)
     (define/public (get-presentations)
-      (cons (list 0 len object modality) (send string get-presentations)))))
+      (cons (textual-presentation 0 len object presentation-type) (send string get-presentations)))))
 
 (define (pstring str)
   (new presentation-string% [string str]))
 (define (pstring-append . strs)
   (new presentation-string-append% [strings strs]))
-(define (pstring-annotate object modality str)
-  (new presentation-of-string% [string str] [object object] [modality modality]))
+(define (pstring-annotate object presentation-type str)
+  (new presentation-of-string% [string str] [object object] [presentation-type presentation-type]))
+
 
 (define presentation-text%
   (class* text%
@@ -90,15 +97,15 @@
     (define active-presentations (seteq))
 
     ;; TODO: less-dumb data structure
-    ;; For now, a list of lists containing offset, length, object, modality
+    ;; For now, a list of lists containing offset, length, object, presentation-type
     (define presented-objects '())
 
     (define/augment (can-insert? start len)
-      (and (not (send presentation-context accepting?))
+      (and (not (send presentation-context currently-accepting))
            (inner #t can-insert? start len)))
 
     (define/augment (can-delete? start len)
-      (and (not (send presentation-context accepting?))
+      (and (not (send presentation-context currently-accepting))
            (inner #t can-delete? start len)))
 
     ;; Maintain the presented-objects map
@@ -106,34 +113,50 @@
       (define end (+ start len))
       (set! presented-objects
             (for/list ([presented presented-objects])
-              (match-define (list obj-start obj-len object modality) presented)
+              (match-define (textual-presentation obj-start obj-len object presentation-type) presented)
               (define obj-end (+ obj-start obj-len))
               (cond
                 [(< start obj-start)
                  (if (<= end obj-start)
-                     (list (- obj-start len) obj-len object modality)
-                     (list start (- obj-len (- end obj-start)) object modality))]
+                     (textual-presentation (- obj-start len)
+                                           obj-len
+                                           object
+                                           presentation-type)
+                     (textual-presentation start
+                                           (- obj-len (- end obj-start))
+                                           object
+                                           presentation-type))]
                 [(= start obj-start)
-                 (list start (max (- obj-len len) 0) object modality)]
+                 (textual-presentation start
+                                       (max (- obj-len len) 0)
+                                       object
+                                       presentation-type)]
                 [(> start obj-start)
                  (cond [(>= start obj-end) ;; after end, no worries
                         presented]
                        [(< end obj-end) ;; we removed from the middle
-                        (list obj-start (- obj-len len) object modality)]
+                        (textual-presentation obj-start
+                                              (- obj-len len)
+                                              object
+                                              presentation-type)]
                        [else ;; overlap with end
-                        (list obj-start (- start obj-start) object modality)])]))))
+                        (list obj-start
+                              (- start obj-start)
+                              object
+                              presentation-type)])]))))
     (define/augment (on-insert start len)
       (define end (+ start len))
       (set! presented-objects
             (for/list ([presented presented-objects])
-              (match-define (list obj-start obj-len object modality) presented)
+              (match-define (textual-presentation obj-start obj-len object presentation-type)
+                presented)
               (define obj-end (+ obj-start obj-len))
               (cond [(<= start obj-start)
-                     (list (+ obj-start len) obj-len object modality)]
+                     (textual-presentation (+ obj-start len) obj-len object presentation-type)]
                     [(>= start obj-end)
                      presented]
                     [else
-                     (list obj-start (+ obj-len len) object modality)]))))
+                     (textual-presentation obj-start (+ obj-len len) object presentation-type)]))))
 
     (define/public (insert-presenting pstring [start #f])
       (unless start
@@ -145,8 +168,9 @@
       (send this insert str start)
       (set! presented-objects
             (append (for/list ([p pres])
-                      (match-define (list obj-start obj-len object modality) p)
-                      (list (+ obj-start start) obj-len object modality))
+                      (match-define (textual-presentation obj-start obj-len object presentation-type)
+                        p)
+                      (textual-presentation (+ obj-start start) obj-len object presentation-type))
                     presented-objects)))
 
 
@@ -166,7 +190,7 @@
         (send dc set-brush "white" 'transparent)
         (send dc set-pen (make-object color% 200 30 0 0.3) 5 'solid)
         (for ([p active-presentations])
-          (match-define (list start len object modality) p)
+          (match-define (textual-presentation start len object presentation-type) p)
           (define relevant-lines
             (in-range (send this position-line start)
                       (add1 (send this position-line (+ start len)))))
@@ -188,32 +212,34 @@
         (send dc set-brush old-brush)
         (send dc set-pen old-pen)))
 
-    (define/public (activate obj)
+    (define/public (highlight type value)
       (set! active-presentations
             (for/seteq ([p presented-objects]
-                        #:when (eq? (caddr p) obj))
-              p))
+                        #:when (presented-object-equal? type
+                                                        (presentation-value p)
+                                                        value))
+                       p))
       (send this invalidate-bitmap-cache))
 
-    (define/public (deactivate)
+    (define/public (no-highlighting)
       (set! active-presentations (seteq))
       (send this invalidate-bitmap-cache))
 
-    (define/public (new-context-state st)
-      (match st
-        [(list 'accepting _ _)
-         (send this set-cursor (make-object cursor% 'arrow) #t)]
-        [_
-         (send this set-cursor #f #f)]))
-
-    (define (object-at x y)
+    (define (presentation-at x y)
       (define (smallest a b)
-        (if (< (cadr a) (cadr b)) a b))
-      (let* ([pos (send this find-position x y)]
+        (if (< (textual-presentation-len a)
+               (textual-presentation-len b))
+            a
+            b))
+      (let* ([accepting (send presentation-context currently-accepting)]
+             [pos (send this find-position x y)]
              [candidates
               (for/list ([p presented-objects]
-                         #:when (and (>= pos (car p))
-                                     (< pos (+ (car p) (cadr p)))))
+                         #:when (and (or (not accepting)
+                                         (presentation-has-type? p accepting))
+                                     (>= pos (textual-presentation-offset p))
+                                     (< pos (+ (textual-presentation-offset p)
+                                               (textual-presentation-len p)))))
                 p)])
         (if (null? candidates)
             #f
@@ -229,22 +255,19 @@
       (define-values (x y)
         (send this dc-location-to-editor-location (send ev get-x) (send ev get-y)))
       (cond [(or (send ev moving?) (send ev entering?))
-             (let ([obj (object-at x y)])
-               (if obj
-                   (send presentation-context make-active (caddr obj))
+             (let ([pres (presentation-at x y)])
+               (if pres
+                   (send presentation-context make-active pres)
                    (send presentation-context nothing-active)))]
-            [(and (send presentation-context accepting?) (send ev button-down?))
-             (let ([obj (object-at x y)])
-               (when obj
-                 (send presentation-context accepted (caddr obj))))]
+            [(and (send presentation-context currently-accepting) (send ev button-down?))
+             (let ([pres (presentation-at x y)])
+               (when pres
+                 (send presentation-context accepted pres)))]
             [(send ev button-down? 'right)
-             (let ([obj (object-at x y)]
+             (let ([pres (presentation-at x y)]
                    [menu (new popup-menu%)])
-               (when obj
-                 (define cmds (send presentation-context commands-for
-                                    (make-object simple-presentation%
-                                                 (caddr obj)
-                                                 (cadddr obj))))
+               (when pres
+                 (define cmds (send presentation-context commands-for pres))
                  (when (not (null? cmds))
                    (for ([cmd cmds])
                      (new menu-item%
@@ -254,3 +277,38 @@
                            (lambda args (queue-callback (cadr cmd)))]))
                    (send (send this get-admin)
                          popup-menu menu (send ev get-x) (send ev get-y)))))]))))
+
+
+(module+ main
+  (require racket racket/gui)
+
+  (struct fnord (illuminatus) #:transparent)
+  (define fnord-1 (fnord "here"))
+  (define fnord-2 (fnord "and here"))
+
+  (define fnord/p (make-presentation-type 'fnord/p))
+  (define non-fnord/p (make-presentation-type 'non-fnord/p))
+
+  (define text
+    (pstring-append (pstring "It seems that there are ")
+                    (pstring-annotate fnord-1 fnord/p (pstring "things we don't know"))
+                    (pstring " about ")
+                    (pstring-annotate fnord-2 non-fnord/p (pstring "our"))
+                    (pstring " ")
+                    (pstring-annotate fnord-2 fnord/p (pstring "linguistic environment"))
+                    (pstring " and why ")
+                    (pstring-annotate fnord-1 fnord/p (pstring "it makes us anxious"))))
+
+  (define f (new frame% [label "Find them!"] [width 800] [height 500]))
+  (define b (new button%
+                 [label "Specificity, please"]
+                 [parent f]
+                 [callback (lambda (b e)
+                             (send (current-presentation-context) accept
+                                   fnord/p displayln))]))
+  (define t (new presentation-text% [auto-wrap #t]))
+  (define c (new editor-canvas% [parent f] [editor t]))
+
+  (send t insert-presenting text)
+
+  (send f show #t))

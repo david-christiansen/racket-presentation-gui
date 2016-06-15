@@ -6,9 +6,7 @@
          "private/presentation/pict.rkt"
          "private/presentation/text.rkt")
 
-(provide gui-inspect)
-
-(define inspection-modality 'value)
+(provide gui-inspect value/p)
 
 (define (exact-floor n) (inexact->exact (floor n)))
 (define (exact-ceiling n) (inexact->exact (ceiling n)))
@@ -17,6 +15,8 @@
   (cc-superimpose
    (filled-rectangle 20 20 #:draw-border? #t #:color "white")
    (filled-ellipse 5 5 #:color "black")))
+
+(define value/p (make-presentation-type 'value/p))
 
 (define (present-value c v)
   (cond
@@ -37,7 +37,7 @@
      (define with-cdr-arrow
        (pin-arrow-line 5 with-car-arrow box-2 cc-find cdr-pict ct-find
                        #:end-angle (* pi 1.5)))
-     (send c make-presentation v 'value
+     (send c make-presentation v value/p
            with-cdr-arrow
            hl)]
     [(vector? v)
@@ -50,14 +50,14 @@
      (define no-arrows (vc-append 60
                                   (hc-append start-pict contents end-pict)
                                   (apply ht-append 20 (map cdr sub-picts))))
-     (send c make-presentation v 'value
+     (send c make-presentation v value/p
            (for/fold ([picture no-arrows])
                      ([elem (in-list sub-picts)])
              (pin-arrow-line 5 picture (car elem) cc-find (cdr elem) ct-find
                              #:start-angle (* pi 1.5)
                              #:end-angle (* pi 1.5)))
            hl)]
-    [else (send c make-presentation v 'value
+    [else (send c make-presentation v value/p
                 (let ([t (inset (text (format "~v" v) null 20) 2)])
                   (cc-superimpose
                    (filled-rectangle (pict-width t) (pict-height t) #:color "white")
@@ -75,7 +75,7 @@
 
 (module+ main
   #;(gui-inspect "hello")
-  (gui-inspect '(1 2 "hello" 4))
+  (gui-inspect '(1 2 "hello" (1 4)))
   #;(gui-inspect (cons 'a 'b))
   )
 
