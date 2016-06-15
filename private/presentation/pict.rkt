@@ -71,6 +71,9 @@
     (define/public (add-pict pict x y)
       (set! picts (cons (pos x y pict) picts)))
 
+    (define/public (remove-all-picts)
+      (set! picts null))
+
     (define/override (on-paint)
       (define a (current-milliseconds))
       (send buffer-dc clear)

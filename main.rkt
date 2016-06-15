@@ -2,7 +2,7 @@
 
 (require racket/gui framework)
 (require pict)
-(require "private/presentation.rkt" "private/presentation/text.rkt")
+(require "private/presentation.rkt" "private/presentation/text.rkt" "private/presentation/pict.rkt")
 
 (module+ test
   (require rackunit))
@@ -10,7 +10,9 @@
 (provide presentation<%> presenter<%>
          presentation-context<%> current-presentation-context
          presentation-text% presentation-string<%>
-         pstring pstring-append pstring-annotate)
+         pstring pstring-append pstring-annotate
+         presentation-pict-canvas%
+         make-presentation-type)
 
 ;; Notice
 ;; To install (from within the package directory):
@@ -43,12 +45,15 @@
   ;; Tests to be run with raco test
   )
 
-#;
+
 (module+ main
   ;; The semantic domain
   (struct icthyoid (text) #:transparent)
   (define my-fish (icthyoid "the fish"))
   (define your-fish (icthyoid "not the fish"))
+
+  (define fish/p (make-presentation-type 'fish/p))
+  (define not-fish/p (make-presentation-type 'not-fish/p))
 
   ;; The GUI
   (define frame (new frame% [label "hey"] [width 800] [height 900]))
@@ -57,45 +62,43 @@
   (define content (new panel:vertical-dragable% [parent split]))
 
   ;; Canvas construction
-  (define canvas (new presentation-canvas% [parent content]))
+  (define canvas
+    (new presentation-pict-canvas% [parent content]))
 
-  (define circle (new presentation-img%
-                      [img (new circle% [radius 50])]
-                      [modality 'not-fish]
-                      [object 'circle]))
-  (define rect (new rectangle% [width 23] [height 90]))
-  (define fish (new presentation-img%
-                    [img (new pict-img%
-                              [pict (standard-fish 50 30 #:color "orange")]
-                              [hl-pict (standard-fish 50 30 #:color "green")])]
-                    [modality 'fish]
-                    [object my-fish]))
-  (define another-fish (new presentation-img%
-                            [img (new pict-img%
-                                      [pict (standard-fish 50 40 #:color "blue")]
-                                      [hl-pict (standard-fish 50 40 #:color "green")])]
-                            [modality 'fish]
-                            [object my-fish]))
-  (define more-fish (new presentation-img%
-                         [img (new pict-img%
-                                   [pict (standard-fish 55 40 #:color "brown")]
-                                   [hl-pict (standard-fish 55 40 #:color "green")])]
-                         [modality 'fish]
-                         [object your-fish]))
-  (send canvas add-img circle 100 100)
-  (send canvas add-img rect 400 200)
-  (send canvas add-img fish 200 400)
-  (send canvas add-img another-fish 400 400)
-  (send canvas add-img more-fish 300 300)
+  (define (hl p)
+    (cc-superimpose p (cellophane (scale p 1.1) 0.25)))
 
-  (send canvas add-img (new pict-img% [pict (ht-append (inset blink 2) (standard-fish 10 10))] [hl-pict blink]) 20 40)
+  (define circle
+    (send canvas make-presentation 'circle not-fish/p
+          (filled-ellipse 50 50)
+          hl))
+  (define rect (filled-rectangle 23 90))
+  (define fish
+    (send canvas make-presentation my-fish fish/p
+          (standard-fish 50 30 #:color "orange")
+          hl))
+  (define another-fish
+    (send canvas make-presentation my-fish fish/p
+          (standard-fish 50 40 #:color "blue")
+          hl))
+  (define more-fish
+    (send canvas make-presentation your-fish fish/p
+          (standard-fish 55 40 #:color "brown")
+          hl))
+  (send canvas add-pict circle 100 100)
+  (send canvas add-pict rect 400 200)
+  (send canvas add-pict fish 200 400)
+  (send canvas add-pict another-fish 400 400)
+  (send canvas add-pict more-fish 300 300)
+
+  (send canvas add-pict (standard-fish 10 10) 20 40)
 
   ;; Text construction
   (define editor (new presentation-text% [auto-wrap #t]))
   (define editor-canvas (new editor-canvas% [parent content] [editor editor]))
 
   (define text-fish (pstring-append (pstring "I am a big fan of the ")
-                                    (pstring-annotate my-fish 'fish (pstring "Fish!"))
+                                    (pstring-annotate my-fish fish/p (pstring "Fish!"))
                                     (pstring " because it is great.")))
 
   (define looong (pstring-append (pstring "hello ") (pstring "hello ") (pstring "hello ")
@@ -110,7 +113,7 @@
                                  (pstring "hello ") (pstring "hello ") (pstring "hello ")
                                  (pstring "hello ") (pstring "hello ") (pstring "hello ")
                                  (pstring-annotate
-                                  your-fish 'fish
+                                  your-fish fish/p
                                   (pstring-append (pstring "F")
                                                   (pstring (build-string 300 (thunk* #\I)))
                                                   (pstring "SH")))
@@ -118,11 +121,9 @@
   (send editor insert-presenting text-fish)
   (send editor insert-presenting looong)
 
-  (send (current-presentation-context) register-command-translator
-        (lambda (obj mod)
-          (if (eqv? mod 'fish)
-              (list (list "Which fish?" (thunk (displayln obj))))
-              (list))))
+  (send (current-presentation-context) register-command-translator fish/p
+        (lambda (obj)
+          (list (list "Which fish?" (thunk (displayln obj))))))
 
   ;; Major commands
   (define fish-button (new button%
@@ -133,7 +134,7 @@
                              (send frame set-status-text "Accepting fish")
                              (send (current-presentation-context)
                                    accept
-                                   (lambda (o m) (eqv? m 'fish))
+                                   (lambda (o m) (eqv? m fish/p))
                                    (lambda (o)
                                      (send frame set-status-text "")
                                      (displayln o))))]))
