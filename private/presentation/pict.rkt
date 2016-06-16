@@ -44,22 +44,19 @@
     (presenter<%>)
     (init [style null])
     (init-field [presentation-context #f])
-    (super-new [style (cons 'no-autoclear style)])
+    (super-new [style (cons 'no-autoclear style)]
+               [paint-callback
+                (lambda (canvas dc)
+                  (send canvas suspend-flush)
+                  (send dc clear)
+                  (set! presentations null)
+                  (for ([img+location picts])
+                    (match-let ([(pos x y p) img+location])
+                      (draw-pict p dc x y)))
+                  (send canvas resume-flush))])
     (unless presentation-context
       (set! presentation-context (current-presentation-context)))
     (send presentation-context register-presenter this)
-
-    ;; Drawing buffer (for flicker-prevention)
-    (define buffer #f)
-    (define buffer-dc #f)
-    (define (resize-buffer x y)
-      (set! buffer (make-screen-bitmap x y))
-      (set! buffer-dc (send buffer make-dc)))
-    (resize-buffer (send this get-width) (send this get-height))
-
-    (define/override (on-size x y)
-      (resize-buffer x y)
-      (queue-callback (thunk (send this refresh))))
 
     (define mouse-x #f)
     (define mouse-y #f)
@@ -69,21 +66,15 @@
     (define picts '())
 
     (define/public (add-pict pict x y)
-      (set! picts (cons (pos x y pict) picts)))
+      (set! picts (cons (pos x y pict) picts))
+      (queue-callback (thunk (send this refresh))))
 
     (define/public (remove-all-picts)
-      (set! picts null))
+      (set! picts null)
+      (queue-callback (thunk (send this refresh))))
 
-    (define/override (on-paint)
-      (define a (current-milliseconds))
-      (send buffer-dc clear)
-      (set! presentations null)
-      (for ([img+location picts])
-        (match-let ([(pos x y p) img+location])
-          (draw-pict p buffer-dc x y )))
-      (send (send this get-dc) draw-bitmap buffer 0 0)
-      (define b (current-milliseconds))
-      (void))
+    (define/override (on-superwindow-show shown?)
+      (send this refresh-now))
 
     (define/public (highlight pres-type value)
       (set! active? (lambda (x) (presented-object-equal? pres-type value x)))
