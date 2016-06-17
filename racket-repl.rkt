@@ -3,75 +3,12 @@
 (require racket/gui framework)
 (require pict)
 (require "private/presentation.rkt"
+         "private/presentation/repl.rkt"
          "private/presentation/text.rkt")
 
 (require "inspector.rkt")
 
-(define presentation-repl%
-  (class* presentation-text%
-    (presenter<%>)
 
-    (init-field eval-callback
-                [prompt-string ">"])
-    (super-new)
-
-    (inherit get-text
-             insert
-             insert-presenting
-             last-position
-             set-position)
-
-    (define previous-input-beginning-position 0)
-    (define input-beginning-position 0)
-    (define locked? #t)
-
-    (define/public (set-prompt new-prompt-string)
-      (set! prompt-string new-prompt-string))
-
-    (define/augment (can-insert? start len)
-      (and (>= start input-beginning-position)
-           (not locked?)))
-
-    (define/override (on-char c)
-      (if (and (eq? (send c get-key-code)
-                    #\return)
-               (not locked?))
-          (begin
-            (set-position (last-position))
-            (super on-char c)
-            (set! locked? #t)
-            (set! previous-input-beginning-position input-beginning-position)
-            (let ([input (get-text input-beginning-position
-                                   (- (last-position) 1))])
-              (queue-callback
-               (thunk (output (eval-callback input))
-                      (insert-prompt)))))
-          (super on-char c)))
-
-    (define (insert-prompt)
-      (queue-callback
-       (thunk (set! locked? #f)
-              (set-position (last-position))
-              (unless (or (= (last-position) 0)
-                          (string=? (get-text (- (last-position) 1) (last-position))
-                                    "\n"))
-                (insert "\n"))
-              (insert prompt-string)
-              (insert " ")
-              (set! input-beginning-position (last-position)))))
-
-    (define/public (output str)
-      (queue-callback
-       (thunk
-        (let ((was-locked? locked?)
-              (insertion-base (last-position)))
-          (set! locked? #f)
-          (if (is-a? str presentation-string<%>)
-              (insert-presenting str)
-              (insert str))
-          (set! locked? was-locked?)))))
-
-    (queue-callback insert-prompt)))
 
 (define (intersperse sep lst)
   (cond
@@ -80,11 +17,14 @@
      lst]
     [else (cons (car lst) (cons sep (intersperse sep (cdr lst))))]))
 
+(define srcloc/p (make-presentation-type 'srcloc/p))
+(define exn/p (make-presentation-type 'exn/p))
+
 (define (present-exn exn)
   (let ([msg (exn-message exn)]
         [trace (continuation-mark-set->context (exn-continuation-marks exn))])
     (pstring-annotate
-     exn 'exn
+     exn exn/p
      (apply pstring-append (pstring msg)
             (pstring "\n")
             (for/list ([frame trace])
@@ -96,7 +36,7 @@
                                  (list (pstring ": "))
                                  null)
                              (if (cdr frame)
-                                 (list (pstring-annotate (cdr frame) 'srcloc
+                                 (list (pstring-annotate (cdr frame) srcloc/p
                                                          (pstring (srcloc->string (cdr frame)))))
                                  null)
                              (list (pstring "\n")))))))))
@@ -156,6 +96,16 @@
 
   (define frame (new frame% [label "REPL"] [width 800] [height 600]))
   (define repl (new presentation-repl%
+                    [highlight-callback
+                     (lambda (dc x1 y1 x2 y2)
+                       (define old-brush (send dc get-brush))
+                       (define old-pen (send dc get-pen))
+                       (send* dc
+                         (set-brush "white" 'transparent)
+                         (set-pen (make-object color% 200 30 0 0.3) 5 'solid)
+                         (draw-rectangle x1 y1 x2 y2)
+                         (set-brush old-brush)
+                         (set-pen old-pen)))]
                     [eval-callback rep]))
   (define editor-canvas (new editor-canvas%
                              [parent frame]

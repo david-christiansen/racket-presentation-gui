@@ -88,7 +88,8 @@
 (define presentation-text%
   (class* text%
     (presenter<%>)
-    (init-field [presentation-context #f])
+    (init-field highlight-callback
+                [presentation-context #f])
     (super-new)
     (unless presentation-context
       (set! presentation-context (current-presentation-context)))
@@ -185,10 +186,6 @@
                                draw-caret)
       (super on-paint before? dc left top right bottom dx dy draw-caret)
       (unless before?
-        (define old-brush (send dc get-brush))
-        (define old-pen (send dc get-pen))
-        (send dc set-brush "white" 'transparent)
-        (send dc set-pen (make-object color% 200 30 0 0.3) 5 'solid)
         (for ([p active-presentations])
           (match-define (textual-presentation start len object presentation-type) p)
           (define relevant-lines
@@ -206,11 +203,10 @@
             (when (> hl-end-pos hl-start-pos) ;; needed to deal with newline at end of presentation
               (send this position-location hl-start-pos x-begin y-begin #t #f)
               (send this position-location hl-end-pos x-end y-end #f #t)
-              (send dc draw-rectangle
-                    (+ (unbox x-begin) dx) (+ (unbox y-begin) dy)
-                    (- (unbox x-end) (unbox x-begin)) (- (unbox y-end) (unbox y-begin))))))
-        (send dc set-brush old-brush)
-        (send dc set-pen old-pen)))
+              (highlight-callback
+               dc
+               (+ (unbox x-begin) dx) (+ (unbox y-begin) dy)
+               (- (unbox x-end) (unbox x-begin)) (- (unbox y-end) (unbox y-begin))))))))
 
     (define/public (highlight type value)
       (set! active-presentations
