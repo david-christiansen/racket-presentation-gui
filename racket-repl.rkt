@@ -4,7 +4,8 @@
 (require pict)
 (require "private/presentation.rkt"
          "private/presentation/repl.rkt"
-         "private/presentation/text.rkt")
+         "private/presentation/text.rkt"
+         "private/presentation/presentation-pict-snip.rkt")
 
 (require "inspector.rkt")
 
@@ -83,6 +84,8 @@
   (real-pretty-present object 0))
 
 (module+ main
+  (define show-graphical? #f)
+
   (send (current-presentation-context) register-command-translator
         value/p
         (lambda (val)
@@ -91,10 +94,20 @@
   (define (rep str)
     (with-handlers ([exn? present-exn])
       (define result (eval (with-input-from-string str (thunk (read)))
-                           (make-base-namespace)))
-      (pretty-present result)))
+                          (make-base-namespace)))
+      (if show-graphical?
+          (let ([snip (new presentation-pict-snip%)])
+            (send snip add-pict (present-to-pict snip result) 1 1)
+            snip)
+          (pretty-present result))))
 
   (define frame (new frame% [label "REPL"] [width 800] [height 600]))
+  (define stacking (new vertical-panel% [parent frame]))
+  (define option (new check-box%
+                      [parent stacking]
+                      [label "Output graphics"]
+                      [callback (lambda (c ev)
+                                  (set! show-graphical? (send c get-value)))]))
   (define repl (new presentation-repl%
                     [highlight-callback
                      (lambda (dc x1 y1 x2 y2)
@@ -108,6 +121,6 @@
                          (set-pen old-pen)))]
                     [eval-callback rep]))
   (define editor-canvas (new editor-canvas%
-                             [parent frame]
+                             [parent stacking]
                              [editor repl]))
   (send frame show #t))

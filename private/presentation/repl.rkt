@@ -65,9 +65,12 @@
         (let ((was-locked? locked?)
               (insertion-base (last-position)))
           (set! locked? #f)
-          (if (is-a? str presentation-string<%>)
-              (insert-presenting str)
-              (insert str))
+          (cond [(is-a? str presentation-string<%>)
+                 (insert-presenting str)]
+                [(string? str)
+                 (insert str)]
+                [(is-a? str snip%)
+                 (insert str)])
           (set! locked? was-locked?)))))
 
     (queue-callback insert-prompt)))

@@ -6,7 +6,7 @@
          "private/presentation/pict.rkt"
          "private/presentation/text.rkt")
 
-(provide gui-inspect value/p)
+(provide gui-inspect value/p (rename-out [present-value present-to-pict]))
 
 (define (exact-floor n) (inexact->exact (floor n)))
 (define (exact-ceiling n) (inexact->exact (ceiling n)))
@@ -18,7 +18,8 @@
 
 (define value/p (make-presentation-type 'value/p))
 
-(define (present-value c v)
+(define/contract (present-value c v)
+  (-> (is-a?/c pict-presenter<%>) any/c pict?)
   (cond
     [(pair? v)
      (define car-pict (present-value c (car v)))

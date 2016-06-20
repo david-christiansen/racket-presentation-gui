@@ -229,7 +229,6 @@
                                 null)]
                   [cmd (tr (presentation-value pres))])
         cmd))))
-
 (define current-presentation-context
   (make-parameter (new presentation-context%)))
 
