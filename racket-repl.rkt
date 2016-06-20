@@ -84,7 +84,7 @@
   (real-pretty-present object 0))
 
 (module+ main
-  (define show-graphical? #t)
+  (define show-graphical? #f)
 
   (send (current-presentation-context) register-command-translator
         value/p
@@ -102,6 +102,12 @@
           (pretty-present result))))
 
   (define frame (new frame% [label "REPL"] [width 800] [height 600]))
+  (define stacking (new vertical-panel% [parent frame]))
+  (define option (new check-box%
+                      [parent stacking]
+                      [label "Output graphics"]
+                      [callback (lambda (c ev)
+                                  (set! show-graphical? (send c get-value)))]))
   (define repl (new presentation-repl%
                     [highlight-callback
                      (lambda (dc x1 y1 x2 y2)
@@ -115,6 +121,6 @@
                          (set-pen old-pen)))]
                     [eval-callback rep]))
   (define editor-canvas (new editor-canvas%
-                             [parent frame]
+                             [parent stacking]
                              [editor repl]))
   (send frame show #t))

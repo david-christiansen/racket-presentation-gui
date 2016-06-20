@@ -17,6 +17,11 @@
           (set-box! b val)
           (void)))
 
+    (define/override (show-popup-menu menu x y)
+      (define admin (send this get-admin))
+      (when admin
+        (send admin popup-menu menu this x y)))
+
     ;; Snip methods
     (send this set-flags (cons 'handles-all-mouse-events
                                (cons 'handles-events
@@ -29,8 +34,8 @@
                                  [space #f]
                                  [lspace #f]
                                  [rspace #f])
-      (set-box!/ok w (+ 2 (send this get-draw-width)))
-      (set-box!/ok h (+ 2 (send this get-draw-height)))
+      (set-box!/ok w (send this get-draw-width))
+      (set-box!/ok h (send this get-draw-height))
       (set-box!/ok descent 1.0)
       (set-box!/ok space 1.0)
       (set-box!/ok lspace 0)
@@ -44,10 +49,13 @@
       (send dc set-pen pen))
 
     (define/override (on-event dc x y editor-x editor-y ev)
-      ;; Here we must pretend that we are running all mouse events
-      ;; relative to global rather than local coordinates, because
-      ;; when the presentation-picts register themselves, they only
-      ;; know about the DC in which they are found.
-      (handle-mouse-event ev 0 0))))
+      (define ev-x (send ev get-x))
+      (define ev-y (send ev get-y))
+      (when (and ev-x (<= 0 (- ev-x x) (send this get-draw-width))
+                 ev-y (<= 0 (- ev-y y) (send this get-draw-height)))
+        (handle-mouse-event ev x y)))
+
+    (define/override (adjust-cursor dc x y ed-x ed-y ev)
+      (make-object cursor% 'arrow))))
 
 

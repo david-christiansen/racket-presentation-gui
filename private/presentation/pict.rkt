@@ -24,6 +24,7 @@
                                           (get-display-backing-scale))]
                  [new-dc (new bitmap-dc% [bitmap new-bitmap])])
             (send new-dc erase)
+            (send new-dc set-smoothing 'aligned)
             (draw-pict pict new-dc 0 0)
             new-dc))])
     (hash-ref! pict-occlusion-cache pict make-bitmap)))
@@ -38,7 +39,6 @@
          (send dc get-pixel x y pixel-color)
          (> (send pixel-color alpha) 0.00001))))
 
-;;; Things that can present picts. Can we make this into a mixin?
 (define pict-presenter<%>
   (interface (presenter<%>)
     [draw-picts (->m (is-a?/c dc<%>) number? number? void?)]
@@ -54,7 +54,10 @@
     [handle-mouse-event (->m (is-a?/c mouse-event%) number? number? void?)]
     [after-draw (->m void?)]
     [get-draw-width (->m number?)]
-    [get-draw-height (->m number?)]))
+    [get-draw-height (->m number?)]
+    [show-popup-menu (->m (is-a?/c popup-menu%)
+                          real? real?
+                          void?)]))
 
 (define pict-presenter-mixin
   (mixin () (presenter<%> pict-presenter<%>)
@@ -142,7 +145,8 @@
       (define drawer (make-pict-drawer pict))
       (define hl-drawer (make-pict-drawer (hl pict)))
       (define (draw-fn dc dx dy)
-        (define-values (bx by bw bh) (transform-rectangle dc dx dy (pict-width pict) (pict-height pict)))
+        (define-values (bx by bw bh)
+          (transform-rectangle dc dx dy (pict-width pict) (pict-height pict)))
         (register-presentation object type pict dx dy)
         (if (active? object)
             (hl-drawer dc dx dy)
@@ -196,10 +200,19 @@
       res)
 
     (define/public (draw-picts dc dx dy)
+      (define old-transformation (send dc get-transformation))
+      (define old-smoothing (send dc get-smoothing))
+      (send dc translate dx dy)
+      (send dc set-smoothing 'aligned)
       (set! presentations null)
       (for ([img+location picts])
         (match-let ([(pos x y p) img+location])
-          (draw-pict p dc (+ dx x) (+ dy y)))))
+          (draw-pict p dc x y)))
+      (send dc set-smoothing old-smoothing)
+      (send dc set-transformation old-transformation))
+
+    (define/public (show-popup-menu menu x y)
+      (void))
 
     (define/public (handle-mouse-event ev dx dy)
       (define mouse-x #f)
@@ -209,31 +222,32 @@
              (set! mouse-x (- (send ev get-x) dx))
              (set! mouse-y (- (send ev get-y) dy))])
       ;; If the mouse coordinates are valid then update the presentation context
-      (cond
-        [(or (send ev moving?) (send ev entering?))
-         (queue-callback
-          (thunk (let ([p (find-current-presentation mouse-x mouse-y)])
-                   (if p
-                       (send presentation-context make-active p)
-                       (send presentation-context nothing-active))
-                   (send this after-draw))))]
-        [(and (send presentation-context currently-accepting) (send ev button-down?))
-         (let ([p (find-current-presentation mouse-x mouse-y)])
-           (when p
-             (send presentation-context accepted p)))]
-        [(send ev button-down? 'right)
-         (let ([p (find-current-presentation mouse-x mouse-y)]
-               [menu (new popup-menu%)])
-           (when p
-             (define cmds (send presentation-context commands-for p))
-             (when (not (null? cmds))
-               (for ([cmd cmds])
-                 (new menu-item%
-                      [label (car cmd)]
-                      [parent menu]
-                      [callback
-                       (lambda args (queue-callback (cadr cmd)))]))
-               (send this popup-menu menu (send ev get-x) (send ev get-y)))))]))))
+      (when (and mouse-x mouse-y)
+        (cond
+          [(or (send ev moving?) (send ev entering?))
+           (queue-callback
+            (thunk (let ([p (find-current-presentation mouse-x mouse-y)])
+                     (if p
+                         (send presentation-context make-active p)
+                         (send presentation-context nothing-active))
+                     (send this after-draw))))]
+          [(and (send presentation-context currently-accepting) (send ev button-down?))
+           (let ([p (find-current-presentation mouse-x mouse-y)])
+             (when p
+               (send presentation-context accepted p)))]
+          [(send ev button-down? 'right)
+           (let ([p (find-current-presentation mouse-x mouse-y)]
+                 [menu (new popup-menu%)])
+             (when p
+               (define cmds (send presentation-context commands-for p))
+               (when (not (null? cmds))
+                 (for ([cmd cmds])
+                   (new menu-item%
+                        [label (car cmd)]
+                        [parent menu]
+                        [callback
+                         (lambda args (queue-callback (cadr cmd)))]))
+                 (send this show-popup-menu menu mouse-x mouse-y))))])))))
 
 (define presentation-pict-canvas%
   (class* (pict-presenter-mixin canvas%)
@@ -257,7 +271,10 @@
       (handle-mouse-event ev 0 0))
 
     (define/override (after-draw)
-      (queue-callback (thunk (send this refresh))))))
+      (queue-callback (thunk (send this refresh))))
+
+    (define/override (show-popup-menu menu x y)
+      (send this popup-menu menu x y))))
 
 
 

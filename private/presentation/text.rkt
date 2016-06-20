@@ -214,7 +214,7 @@
                         #:when (presented-object-equal? type
                                                         (presentation-value p)
                                                         value))
-                       p))
+              p))
       (send this invalidate-bitmap-cache))
 
     (define/public (no-highlighting)
@@ -227,24 +227,31 @@
                (textual-presentation-len b))
             a
             b))
-      (let* ([accepting (send presentation-context currently-accepting)]
-             [pos (send this find-position x y)]
-             [candidates
-              (for/list ([p presented-objects]
-                         #:when (and (or (not accepting)
-                                         (presentation-has-type? p accepting))
-                                     (>= pos (textual-presentation-offset p))
-                                     (< pos (+ (textual-presentation-offset p)
-                                               (textual-presentation-len p)))))
-                p)])
-        (if (null? candidates)
-            #f
-            (let loop ([best (car candidates)]
-                       [remaining (cdr candidates)])
-              (if (null? remaining)
-                  best
-                  (loop (smallest best (car remaining))
-                        (cdr remaining)))))))
+      (define accepting (send presentation-context currently-accepting))
+      (define pos (send this find-position x y))
+      ;; We need to first check if the found snip itself handles
+      ;; presentations, and if so, trust it to do the right thing.
+      ;; Otherwise we get flickering as both the text% and the snip
+      ;; that does presenting fight for cursor control.
+      (define snip (send this find-snip pos 'after))
+      (if (is-a? snip presenter<%>)
+          'presenter
+          (let ([candidates
+                 (for/list ([p presented-objects]
+                            #:when (and (or (not accepting)
+                                            (presentation-has-type? p accepting))
+                                        (>= pos (textual-presentation-offset p))
+                                        (< pos (+ (textual-presentation-offset p)
+                                                  (textual-presentation-len p)))))
+                   p)])
+            (if (null? candidates)
+                'nothing
+                (let loop ([best (car candidates)]
+                           [remaining (cdr candidates)])
+                  (if (null? remaining)
+                      best
+                      (loop (smallest best (car remaining))
+                            (cdr remaining))))))))
 
     (define/override (on-default-event ev)
       (super on-default-event ev)
@@ -252,17 +259,20 @@
         (send this dc-location-to-editor-location (send ev get-x) (send ev get-y)))
       (cond [(or (send ev moving?) (send ev entering?))
              (let ([pres (presentation-at x y)])
-               (if pres
-                   (send presentation-context make-active pres)
-                   (send presentation-context nothing-active)))]
+               (match pres
+                 [(? presentation?)
+                  (send presentation-context make-active pres)]
+                 ['nothing
+                  (send presentation-context nothing-active)]
+                 ['presenter (void)]))]
             [(and (send presentation-context currently-accepting) (send ev button-down?))
              (let ([pres (presentation-at x y)])
-               (when pres
+               (when (presentation? pres)
                  (send presentation-context accepted pres)))]
             [(send ev button-down? 'right)
              (let ([pres (presentation-at x y)]
                    [menu (new popup-menu%)])
-               (when pres
+               (when (presentation? pres)
                  (define cmds (send presentation-context commands-for pres))
                  (when (not (null? cmds))
                    (for ([cmd cmds])
