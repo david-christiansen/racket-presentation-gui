@@ -4,7 +4,8 @@
 (require pict)
 (require "private/presentation.rkt"
          "private/presentation/repl.rkt"
-         "private/presentation/text.rkt")
+         "private/presentation/text.rkt"
+         "private/presentation/presentation-pict-snip.rkt")
 
 (require "inspector.rkt")
 
@@ -83,6 +84,8 @@
   (real-pretty-present object 0))
 
 (module+ main
+  (define show-graphical? #t)
+
   (send (current-presentation-context) register-command-translator
         value/p
         (lambda (val)
@@ -91,8 +94,12 @@
   (define (rep str)
     (with-handlers ([exn? present-exn])
       (define result (eval (with-input-from-string str (thunk (read)))
-                           (make-base-namespace)))
-      (pretty-present result)))
+                          (make-base-namespace)))
+      (if show-graphical?
+          (let ([snip (new presentation-pict-snip%)])
+            (send snip add-pict (present-to-pict snip result) 1 1)
+            snip)
+          (pretty-present result))))
 
   (define frame (new frame% [label "REPL"] [width 800] [height 600]))
   (define repl (new presentation-repl%

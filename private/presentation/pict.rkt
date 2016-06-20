@@ -6,14 +6,14 @@
 
 (require "../presentation.rkt")
 
-(provide presentation-pict-canvas%)
+(provide presentation-pict-canvas% pict-presenter<%> pict-presenter-mixin)
 
 (struct pos (x y pict) #:transparent)
 
 (define (exact-round n) (inexact->exact (round n)))
 (define (exact-ceiling n) (inexact->exact (ceiling n)))
 
-(define pict-occlusion-cache (make-hasheq))
+(define pict-occlusion-cache (make-weak-hasheq))
 (define (occlusion-dc pict)
   (let ([make-bitmap
          (thunk
@@ -38,51 +38,65 @@
          (send dc get-pixel x y pixel-color)
          (> (send pixel-color alpha) 0.00001))))
 
+;;; Things that can present picts. Can we make this into a mixin?
+(define pict-presenter<%>
+  (interface (presenter<%>)
+    [draw-picts (->m (is-a?/c dc<%>) number? number? void?)]
+    [make-presentation (->i ([me any/c]
+                             [object (p-t) (presentation-type/c p-t)]
+                             [p-t presentation-type?]
+                             [pict pict?]
+                             [hl (-> pict? pict?)])
+                            [result pict?])]
+    [add-pict (->m pict? number? number? void?)]
+    [remove-all-picts (->m void?)]
+    [find-current-presentation (->m number? number? (or/c presentation? #f))]
+    [handle-mouse-event (->m (is-a?/c mouse-event%) number? number? void?)]
+    [after-draw (->m void?)]
+    [get-draw-width (->m number?)]
+    [get-draw-height (->m number?)]))
 
-(define presentation-pict-canvas%
-  (class* canvas%
-    (presenter<%>)
-    (init [style null])
+(define pict-presenter-mixin
+  (mixin () (presenter<%> pict-presenter<%>)
+    (super-new)
     (init-field [presentation-context #f])
-    (super-new [style (cons 'no-autoclear style)]
-               [paint-callback
-                (lambda (canvas dc)
-                  (send canvas suspend-flush)
-                  (send dc clear)
-                  (set! presentations null)
-                  (for ([img+location picts])
-                    (match-let ([(pos x y p) img+location])
-                      (draw-pict p dc x y)))
-                  (send canvas resume-flush))])
+
     (unless presentation-context
       (set! presentation-context (current-presentation-context)))
     (send presentation-context register-presenter this)
 
-    (define mouse-x #f)
-    (define mouse-y #f)
-    ;; a procedure to recognize active presentations
-    (define active? (lambda (x) #f))
-
     (define picts '())
 
     (define/public (add-pict pict x y)
-      (set! picts (cons (pos x y pict) picts))
-      (queue-callback (thunk (send this refresh))))
+      (set! picts (cons (pos x y pict) picts)))
 
     (define/public (remove-all-picts)
       (set! picts null)
-      (queue-callback (thunk (send this refresh))))
+      (send this after-draw))
 
-    (define/override (on-superwindow-show shown?)
-      (send this refresh-now))
+    (define/public (get-draw-width)
+      (apply max (for/list ([p picts])
+                   (match-define (pos x y pict) p)
+                   (+ x (pict-width pict)))))
+
+    (define/public (get-draw-height)
+      (apply max (for/list ([p picts])
+                   (match-define (pos x y pict) p)
+                   (+ y (pict-height pict)))))
+
+    ;; a procedure to recognize active presentations
+    (define active? (lambda (x) #f))
+
+    (define/public (after-draw)
+      (void))
 
     (define/public (highlight pres-type value)
       (set! active? (lambda (x) (presented-object-equal? pres-type value x)))
-      (queue-callback (thunk (send this refresh))))
+      (send this after-draw))
 
     (define/public (no-highlighting)
       (set! active? (lambda (x) #f))
-      (queue-callback (thunk (send this refresh))))
+      (send this after-draw))
 
     (define/public (new-context-state st)
       (void))
@@ -106,6 +120,7 @@
             (lambda (x) (pict-presentation-type x))))
 
     (define presentations null)
+
     (define (register-presentation object modality pict x y)
       (set! presentations
             (cons
@@ -141,22 +156,29 @@
 
     (define (find-presentations x y)
       (define ((presentation-covers? x y) p)
-        (and (<= (pict-presentation-x p) x (+ (pict-presentation-x p)
-                                              (pict-width (pict-presentation-pict p))))
-             (<= (pict-presentation-y p) y (+ (pict-presentation-y p)
-                                              (pict-height (pict-presentation-pict p))))))
+        (and (<= (pict-presentation-x p)
+                 x
+                 (+ (pict-presentation-x p)
+                    (pict-width (pict-presentation-pict p))))
+             (<= (pict-presentation-y p)
+                 y
+                 (+ (pict-presentation-y p)
+                    (pict-height (pict-presentation-pict p))))))
       (define (presentation-area pres)
         (define pict (pict-presentation-pict pres))
         (* (pict-width pict) (pict-height pict)))
-      (sort (filter (presentation-covers? x y) presentations) < #:key presentation-area))
+      
+      (sort (filter (presentation-covers? x y) presentations)
+            <
+            #:key presentation-area))
 
-    (define (find-current-presentation x y)
+    (define/public (find-current-presentation x y)
       (define accepting (send presentation-context currently-accepting))
       (define (presentation-interesting? p)
         (or (not accepting)
             (presentation-has-type? p accepting)))
       (define res
-        (let* ([ps (find-presentations mouse-x mouse-y)])
+        (let* ([ps (find-presentations x y)])
           (if (pair? ps)
               (let loop ([best (car ps)] [rest (cdr ps)])
                 (cond
@@ -173,14 +195,19 @@
               #f)))
       res)
 
-    (define/override (on-event ev)
+    (define/public (draw-picts dc dx dy)
+      (set! presentations null)
+      (for ([img+location picts])
+        (match-let ([(pos x y p) img+location])
+          (draw-pict p dc (+ dx x) (+ dy y)))))
+
+    (define/public (handle-mouse-event ev dx dy)
+      (define mouse-x #f)
+      (define mouse-y #f)
       ;; Update mouse coordinates
       (cond [(or (send ev moving?) (send ev entering?) (send ev button-down?))
-             (set! mouse-x (send ev get-x))
-             (set! mouse-y (send ev get-y))]
-            [(send ev leaving?)
-             (set! mouse-x #f)
-             (set! mouse-y #f)])
+             (set! mouse-x (- (send ev get-x) dx))
+             (set! mouse-y (- (send ev get-y) dy))])
       ;; If the mouse coordinates are valid then update the presentation context
       (cond
         [(or (send ev moving?) (send ev entering?))
@@ -189,7 +216,7 @@
                    (if p
                        (send presentation-context make-active p)
                        (send presentation-context nothing-active))
-                   (queue-callback (thunk (send this refresh))))))]
+                   (send this after-draw))))]
         [(and (send presentation-context currently-accepting) (send ev button-down?))
          (let ([p (find-current-presentation mouse-x mouse-y)])
            (when p
@@ -207,6 +234,30 @@
                       [callback
                        (lambda args (queue-callback (cadr cmd)))]))
                (send this popup-menu menu (send ev get-x) (send ev get-y)))))]))))
+
+(define presentation-pict-canvas%
+  (class* (pict-presenter-mixin canvas%)
+    (presenter<%>)
+    (init [style null])
+    (super-new [style (cons 'no-autoclear style)]
+               [paint-callback
+                (lambda (canvas dc)
+                  (send canvas suspend-flush)
+                  (send dc clear)
+                  (send this draw-picts dc 0 0)
+                  (send canvas resume-flush))])
+
+    (inherit find-current-presentation
+             handle-mouse-event)
+
+    (define/override (on-superwindow-show shown?)
+      (send this refresh-now))
+
+    (define/override (on-event ev)
+      (handle-mouse-event ev 0 0))
+
+    (define/override (after-draw)
+      (queue-callback (thunk (send this refresh))))))
 
 
 
