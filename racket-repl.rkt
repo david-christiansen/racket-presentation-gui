@@ -84,12 +84,23 @@
   (real-pretty-present object 0))
 
 (module+ main
+  (require macro-debugger/syntax-browser)
+  (require macro-debugger/stepper)
   (define show-graphical? #f)
 
   (send (current-presentation-context) register-command-translator
         value/p
         (lambda (val)
           (list (list "Inspect value" (thunk (gui-inspect val))))))
+
+  (send (current-presentation-context) register-command-translator
+        value/p
+        (lambda (val)
+          (if (syntax? val)
+              (list
+               (list "Macro Stepper" (thunk (expand/step val)))
+               (list "Browse Syntax" (thunk (browse-syntax val))))
+              (list))))
 
   (define (rep str)
     (with-handlers ([exn? present-exn])
