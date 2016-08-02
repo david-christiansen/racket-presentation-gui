@@ -2,7 +2,11 @@
 
 (require racket/gui framework)
 (require pict)
-(require "private/presentation.rkt" "private/presentation/text.rkt" "private/presentation/pict.rkt")
+(require "private/presentation.rkt"
+         "private/presentation/text.rkt"
+         "private/presentation/pict.rkt"
+         "private/presentation/presentation-pict-snip.rkt"
+         "private/presentation/repl.rkt")
 
 (module+ test
   (require rackunit))
@@ -12,7 +16,11 @@
          presentation-text% presentation-string<%>
          pstring pstring-append pstring-annotate
          presentation-pict-canvas%
-         make-presentation-type)
+         presentation-pict-snip%
+         presentation-repl%
+         pict-presenter<%>
+         make-presentation-type
+         presentation-type?)
 
 ;; Notice
 ;; To install (from within the package directory):
