@@ -105,7 +105,7 @@
   (define (rep str)
     (with-handlers ([exn? present-exn])
       (define result (eval (with-input-from-string str (thunk (read)))
-                          (make-base-namespace)))
+                           (current-namespace)))
       (if show-graphical?
           (let ([snip (new presentation-pict-snip%)])
             (send snip add-pict (present-to-pict snip result) 1 1)

@@ -1,7 +1,7 @@
 #lang racket
 
 (require racket/gui framework)
-(require pict pict/shadow)
+(require pict pict/shadow pict/convert)
 (require "private/presentation.rkt"
          "private/presentation/pict.rkt"
          "private/presentation/text.rkt")
@@ -19,7 +19,7 @@
 (define value/p (make-presentation-type 'value/p))
 
 (define/contract (present-value c v)
-  (-> (is-a?/c pict-presenter<%>) any/c pict?)
+  (-> (is-a?/c pict-presenter<%>) any/c pict-convertible?)
   (cond
     [(pair? v)
      (define car-pict (present-value c (car v)))
@@ -39,7 +39,7 @@
        (pin-arrow-line 5 with-car-arrow box-2 cc-find cdr-pict ct-find
                        #:end-angle (* pi 1.5)))
      (send c make-presentation v value/p
-           with-cdr-arrow
+           (thunk* with-cdr-arrow)
            hl)]
     [(vector? v)
      (define start-pict (text "#(" null 20))
@@ -52,17 +52,29 @@
                                   (hc-append start-pict contents end-pict)
                                   (apply ht-append 20 (map cdr sub-picts))))
      (send c make-presentation v value/p
-           (for/fold ([picture no-arrows])
-                     ([elem (in-list sub-picts)])
-             (pin-arrow-line 5 picture (car elem) cc-find (cdr elem) ct-find
+           (thunk* (for/fold ([picture no-arrows])
+                             ([elem (in-list sub-picts)])
+                     (pin-arrow-line 5 picture (car elem) cc-find (cdr elem) ct-find
+                                     #:start-angle (* pi 1.5)
+                                     #:end-angle (* pi 1.5))))
+           hl)]
+    [(box? v)
+     (define box-pict (cell-box))
+     (define (make-sub-pict contents)
+       (present-value c contents))
+     (send c make-presentation v value/p
+           (lambda (val)
+             (define val-pict (make-sub-pict (unbox val)))
+             (define picture (vc-append 20 box-pict val-pict))
+             (pin-arrow-line 5 picture box-pict cc-find val-pict ct-find
                              #:start-angle (* pi 1.5)
                              #:end-angle (* pi 1.5)))
            hl)]
     [else (send c make-presentation v value/p
-                (let ([t (inset (text (format "~v" v) null 20) 2)])
-                  (cc-superimpose
-                   (filled-rectangle (pict-width t) (pict-height t) #:color "white")
-                   t))
+                (thunk* (let ([t (inset (text (format "~v" v) null 20) 2)])
+                          (cc-superimpose
+                           (filled-rectangle (pict-width t) (pict-height t) #:color "white")
+                           t)))
                 hl)]))
 
 (define (hl p)
@@ -76,7 +88,7 @@
 
 (module+ main
   #;(gui-inspect "hello")
-  (gui-inspect '(1 2 "hello" (1 4)))
+  (gui-inspect '(1 2 "hello" (1 #&4)))
   #;(gui-inspect (cons 'a 'b))
   )
 

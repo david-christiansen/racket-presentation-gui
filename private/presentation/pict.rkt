@@ -1,7 +1,7 @@
 #lang racket
 
 (require racket/gui/base racket/class racket/contract racket/match racket/set)
-(require pict pict/shadow)
+(require pict pict/shadow pict/convert)
 (require (only-in pict/private/pict cons-picture*))
 
 (require "../presentation.rkt")
@@ -45,10 +45,10 @@
     [make-presentation (->i ([me any/c]
                              [object (p-t) (presentation-type/c p-t)]
                              [p-t presentation-type?]
-                             [pict pict?]
-                             [hl (-> pict? pict?)])
-                            [result pict?])]
-    [add-pict (->m pict? number? number? void?)]
+                             [pict (p-t) (-> (presentation-type/c p-t) pict-convertible?)]
+                             [hl (-> pict? pict-convertible?)])
+                            [result pict-convertible?])]
+    [add-pict (->m pict-convertible? number? number? void?)]
     [remove-all-picts (->m void?)]
     [find-current-presentation (->m number? number? (or/c presentation? #f))]
     [handle-mouse-event (->m (is-a?/c mouse-event%) number? number? void?)]
@@ -141,22 +141,30 @@
           p1
           p2))
 
-    (define/public (make-presentation object type pict hl)
-      (define drawer (make-pict-drawer pict))
-      (define hl-drawer (make-pict-drawer (hl pict)))
-      (define (draw-fn dc dx dy)
-        (define-values (bx by bw bh)
-          (transform-rectangle dc dx dy (pict-width pict) (pict-height pict)))
-        (register-presentation object type pict dx dy)
-        (if (active? object)
-            (hl-drawer dc dx dy)
-            (drawer dc dx dy)))
-      (make-pict `(prog ,draw-fn ,(pict-height pict))
-                 (pict-width pict) (pict-height pict)
-                 (pict-ascent pict) (pict-descent pict)
-                 (pict-children pict)
-                 (pict-panbox pict)
-                 (pict-last pict)))
+    (struct presented-pict
+      (object type object->pict hl)
+      #:property prop:pict-convertible
+      (lambda (me)
+        (match-define (presented-pict object type object->pict hl) me)
+        (define pict (object->pict object))
+        (define drawer (make-pict-drawer pict))
+        (define hl-drawer (make-pict-drawer (hl (pict-convert pict))))
+        (define (draw-fn dc dx dy)
+          (define-values (bx by bw bh)
+            (transform-rectangle dc dx dy (pict-width pict) (pict-height pict)))
+          (register-presentation object type pict dx dy)
+          (if (active? object)
+              (hl-drawer dc dx dy)
+              (drawer dc dx dy)))
+        (make-pict `(prog ,draw-fn ,(pict-height pict))
+                   (pict-width pict) (pict-height pict)
+                   (pict-ascent pict) (pict-descent pict)
+                   (pict-children pict)
+                   (pict-panbox pict)
+                   (pict-last pict))))
+
+    (define/public (make-presentation object type obj->pict hl)
+      (presented-pict object type obj->pict hl))
 
     (define (find-presentations x y)
       (define ((presentation-covers? x y) p)
@@ -171,7 +179,6 @@
       (define (presentation-area pres)
         (define pict (pict-presentation-pict pres))
         (* (pict-width pict) (pict-height pict)))
-      
       (sort (filter (presentation-covers? x y) presentations)
             <
             #:key presentation-area))
