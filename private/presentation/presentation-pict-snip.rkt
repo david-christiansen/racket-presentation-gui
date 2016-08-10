@@ -22,6 +22,10 @@
       (when admin
         (send admin popup-menu menu this x y)))
 
+    (define/override (mutation)
+      (super mutation)
+      (send (send this get-admin) resized this #t))
+
     ;; Snip methods
     (send this set-flags (cons 'handles-all-mouse-events
                                (cons 'handles-events

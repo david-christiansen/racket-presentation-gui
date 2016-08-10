@@ -30,13 +30,13 @@
     (hash-ref! pict-occlusion-cache pict make-bitmap)))
 
 (define (pict-occludes? pict x y)
-  (set! x (exact-round x))
-  (set! y (exact-round y))
-  (and (<= 0 x (pict-width pict))
-       (<= 0 y (pict-height pict))
+  (define x* (exact-round x))
+  (define y* (exact-round y))
+  (and (<= 0 x* (pict-width pict))
+       (<= 0 y* (pict-height pict))
        (let ([dc (occlusion-dc pict)]
              [pixel-color (make-object color%)])
-         (send dc get-pixel x y pixel-color)
+         (send dc get-pixel x* y* pixel-color)
          (> (send pixel-color alpha) 0.00001))))
 
 (define pict-presenter<%>
@@ -117,18 +117,23 @@
       (send p transform mx)
       (send p get-bounding-box))
 
-    (struct pict-presentation (x y pict value type)
+    (struct pict-presentation (x y obj->pict value type)
+      #:transparent
       #:property prop:presentation
       (list (lambda (x) (pict-presentation-value x))
             (lambda (x) (pict-presentation-type x))))
 
     (define presentations null)
 
-    (define (register-presentation object modality pict x y)
+    (define (register-presentation object modality obj->pict x y)
       (set! presentations
             (cons
-             (pict-presentation x y pict object modality)
+             (pict-presentation x y obj->pict object modality)
              presentations)))
+
+    (define (pict-presentation-pict pp)
+      (match-define (pict-presentation _ _ obj->pict val _) pp)
+      (obj->pict val))
 
     (define (most-specific p1 p2)
       ;; TODO - find a better measure. Right now, smallest = most specific...
@@ -141,30 +146,39 @@
           p1
           p2))
 
+    (define pict-cache (make-weak-hasheq))
+
+    (define/public (mutation)
+      (hash-clear! pict-cache)
+      (send this after-draw))
+
     (struct presented-pict
       (object type object->pict hl)
       #:property prop:pict-convertible
       (lambda (me)
         (match-define (presented-pict object type object->pict hl) me)
-        (define pict (object->pict object))
-        (define drawer (make-pict-drawer pict))
-        (define hl-drawer (make-pict-drawer (hl (pict-convert pict))))
-        (define (draw-fn dc dx dy)
-          (define-values (bx by bw bh)
-            (transform-rectangle dc dx dy (pict-width pict) (pict-height pict)))
-          (register-presentation object type pict dx dy)
-          (if (active? object)
-              (hl-drawer dc dx dy)
-              (drawer dc dx dy)))
-        (make-pict `(prog ,draw-fn ,(pict-height pict))
-                   (pict-width pict) (pict-height pict)
-                   (pict-ascent pict) (pict-descent pict)
-                   (pict-children pict)
-                   (pict-panbox pict)
-                   (pict-last pict))))
+        (hash-ref! pict-cache me
+                   (thunk
+                    (define pict (pict-convert (object->pict object)))
+                    (define drawer (make-pict-drawer pict))
+                    (define hl-drawer (make-pict-drawer (hl pict)))
+                    (define (draw-fn dc dx dy)
+                      (define-values (bx by bw bh)
+                        (transform-rectangle dc dx dy (pict-width pict) (pict-height pict)))
+                      (register-presentation object type object->pict dx dy)
+                      (if (active? object)
+                          (hl-drawer dc dx dy)
+                          (drawer dc dx dy)))
+                    (make-pict `(prog ,draw-fn ,(pict-height pict))
+                               (pict-width pict) (pict-height pict)
+                               (pict-ascent pict) (pict-descent pict)
+                               (pict-children pict)
+                               (pict-panbox pict)
+                               (pict-last pict))))))
 
     (define/public (make-presentation object type obj->pict hl)
       (presented-pict object type obj->pict hl))
+
 
     (define (find-presentations x y)
       (define ((presentation-covers? x y) p)

@@ -109,6 +109,9 @@
       (and (not (send presentation-context currently-accepting))
            (inner #t can-delete? start len)))
 
+    (define/public (mutation)
+      (void))
+
     ;; Maintain the presented-objects map
     (define/augment (on-delete start len)
       (define end (+ start len))

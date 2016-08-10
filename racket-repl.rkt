@@ -102,10 +102,30 @@
                (list "Browse Syntax" (thunk (browse-syntax val))))
               (list))))
 
+  (send (current-presentation-context) register-command-translator
+        value/p
+        (lambda (val)
+          (if (box? val)
+              (list (list "Modify box contents"
+                          (thunk (define str
+                                   (get-text-from-user
+                                    "New value"
+                                    "Please provide a new value"))
+                                 (define result
+                                   (with-handlers ([exn:fail? exn-message])
+                                     (eval (with-input-from-string str (thunk (read)))
+                                           (current-namespace))))
+                                 (set-box! val result)
+                                 (send (current-presentation-context) mutation))))
+              (list))))
+
+
   (define (rep str)
     (with-handlers ([exn? present-exn])
-      (define result (eval (with-input-from-string str (thunk (read)))
-                           (current-namespace)))
+      (define result
+        (eval (with-input-from-string str (thunk (read)))
+              (current-namespace)))
+      (send (current-presentation-context) mutation)
       (if show-graphical?
           (let ([snip (new presentation-pict-snip%)])
             (send snip add-pict (present-to-pict snip result) 1 1)
