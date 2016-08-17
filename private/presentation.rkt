@@ -11,7 +11,7 @@
          prop:presentation presentation?
          (struct-out simple-presentation)
          presented-object-equal?
-         presentation-context<%>
+         presentation-context<%> presentation-context%
          (contract-out [current-presentation-context
                         (parameter/c (is-a?/c presentation-context<%>))]))
 
@@ -168,10 +168,25 @@
                                             (-> void?))))])
           ()
           [result void?])]
+    [register-default-command
+     (->i ([me any/c]
+           [type presentation-type?]
+           [proc (type) (-> (presentation-type/c type)
+                            void?)])
+          ()
+          [result void?])]
     [commands-for
      (->m presentation?
           (listof (list/c string?
                           (-> void?))))]
+
+    [default-command-for
+      (->i ([me any/c]
+            [pres presentation?])
+           ()
+           [result (pres) (-> (presentation-type/c
+                               (presentation-presentation-type pres))
+                              void?)])]
     [mutation (->m void?)]))
 
 ;;; A presentation context manages the global application presentation
@@ -226,12 +241,23 @@
                     type
                     (lambda (old) (cons proc old))
                     null))
+
+    (define default-commands (make-weak-hasheq))
+    (define/public (register-default-command type proc)
+      (hash-set! default-commands type proc))
+
     (define/public (commands-for pres)
       (for*/list ([tr (hash-ref command-translators
                                 (presentation-presentation-type pres)
                                 null)]
                   [cmd (tr (presentation-value pres))])
         cmd))
+
+    (define/public (default-command-for pres)
+      (hash-ref default-commands
+                (presentation-presentation-type pres)
+                (lambda () (lambda (obj) (void)))))
+
     (define/public (mutation)
       (for ([presenter (in-set presenters)])
         (send presenter mutation)))))

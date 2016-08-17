@@ -43,65 +43,67 @@
             (hash-clear! presented)))))
  presented)
 
-(define/contract (present-value c v [cache (make-cache)])
+(define/contract (present-value c v)
   (-> (is-a?/c pict-presenter<%>) any/c pict-convertible?)
-  (hash-ref! cache v
-             (cond
-               [(pair? v)
-                (send c make-presentation v value/p
-                      (lambda (pair)
-                        (define car-pict (present-value c (car pair) cache))
-                        (define cdr-pict (present-value c (cdr pair) cache))
-                        (define box-1 (cell-box))
-                        (define box-2 (cell-box))
-                        (define cons-cell-pict
-                          (vc-append 30
-                                     (hc-append box-1 box-2)
-                                     (ht-append 20
-                                                car-pict
-                                                cdr-pict)))
-                        (define with-car-arrow
-                          (pin-arrow-line 5 cons-cell-pict box-1 cc-find car-pict ct-find
-                                          #:end-angle (* pi 1.5)))
-                        (define with-cdr-arrow
-                          (pin-arrow-line 5 with-car-arrow box-2 cc-find cdr-pict ct-find
-                                          #:end-angle (* pi 1.5)))
-                        with-cdr-arrow)
-                      hl)]
-               [(vector? v)
-                (send c make-presentation v value/p
-                      (lambda (vec)
-                        (define start-pict (text "#(" null 20))
-                        (define end-pict (text ")" null 20))
-                        (define sub-picts
-                          (for/list ([cell (in-vector vec)])
-                            (cons (cell-box) (present-value c cell cache))))
-                        (define contents (apply hc-append (map car sub-picts)))
-                        (define no-arrows (vc-append 60
-                                                     (hc-append start-pict contents end-pict)
-                                                     (apply ht-append 20 (map cdr sub-picts))))
-                        (for/fold ([picture no-arrows])
-                                  ([elem (in-list sub-picts)])
-                          (pin-arrow-line 5 picture (car elem) cc-find (cdr elem) ct-find
-                                          #:start-angle (* pi 1.5)
-                                          #:end-angle (* pi 1.5))))
-                      hl)]
-               [(box? v)
-                (send c make-presentation v value/p
-                      (lambda (val)
-                        (define box-pict (cell-box))
-                        (define val-pict (present-value c (unbox val) cache))
-                        (define picture (vc-append 20 box-pict val-pict))
-                        (pin-arrow-line 5 picture box-pict cc-find val-pict ct-find
-                                        #:start-angle (* pi 1.5)
-                                        #:end-angle (* pi 1.5)))
-                      hl)]
-               [else (send c make-presentation v value/p
-                           (thunk* (let ([t (inset (text (format "~v" v) null 20) 2)])
-                                     (cc-superimpose
-                                      (filled-rectangle (pict-width t) (pict-height t) #:color "white")
-                                      t)))
-                           hl)])))
+  (cond
+    [(pair? v)
+     (define car-pict (present-value c (car v)))
+     (define cdr-pict (present-value c (cdr v)))
+     (send c make-presentation v value/p
+           (lambda (pair)
+             (define box-1 (cell-box))
+             (define box-2 (cell-box))
+             (define cons-cell-pict
+               (vc-append 30
+                          (hc-append box-1 box-2)
+                          (ht-append 20
+                                     car-pict
+                                     cdr-pict)))
+             (define with-car-arrow
+               (pin-arrow-line 5 cons-cell-pict box-1 cc-find car-pict ct-find
+                               #:end-angle (* pi 1.5)))
+             (define with-cdr-arrow
+               (pin-arrow-line 5 with-car-arrow box-2 cc-find cdr-pict ct-find
+                               #:end-angle (* pi 1.5)))
+             with-cdr-arrow)
+           hl)]
+    [(vector? v)
+     (define sub-picts
+       (for/list ([cell (in-vector v)])
+         (cons (cell-box) (present-value c cell))))
+     (send c make-presentation v value/p
+           (lambda (vec)
+             (define start-pict (text "#(" null 20))
+             (define end-pict (text ")" null 20))
+             (define contents (apply hc-append (map car sub-picts)))
+             (define no-arrows (vc-append 60
+                                          (hc-append start-pict contents end-pict)
+                                          (apply ht-append 20 (map cdr sub-picts))))
+             (for/fold ([picture no-arrows])
+                       ([elem (in-list sub-picts)])
+               (pin-arrow-line 5 picture (car elem) cc-find (cdr elem) ct-find
+                               #:start-angle (* pi 1.5)
+                               #:end-angle (* pi 1.5))))
+           hl)]
+    [(box? v)
+     (send c make-presentation v value/p
+           (lambda (val)
+             (define box-pict (cell-box))
+             (define val-pict (present-value c (unbox val)))
+             (define picture (vc-append 20 box-pict val-pict))
+             (pin-arrow-line 5 picture box-pict cc-find val-pict ct-find
+                             #:start-angle (* pi 1.5)
+                             #:end-angle (* pi 1.5)))
+           hl)]
+    [else
+     (define picture
+       (let ([t (inset (text (format "~v" v) null 20) 2)])
+         (cc-superimpose
+          (filled-rectangle (pict-width t) (pict-height t) #:color "white")
+          t)))
+     (send c make-presentation v value/p
+           (thunk* picture)
+            hl)]))
 
 (define (hl p)
   (colorize p "red"))

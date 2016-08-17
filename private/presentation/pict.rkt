@@ -256,6 +256,12 @@
            (let ([p (find-current-presentation mouse-x mouse-y)])
              (when p
                (send presentation-context accepted p)))]
+          [(send ev button-down? 'left)
+           (let ([p (find-current-presentation mouse-x mouse-y)])
+             (when p
+               (queue-callback
+                (thunk ((send presentation-context default-command-for p)
+                        (presentation-value p))))))]
           [(send ev button-down? 'right)
            (let ([p (find-current-presentation mouse-x mouse-y)]
                  [menu (new popup-menu%)])

@@ -12,7 +12,7 @@
   (require rackunit))
 
 (provide presentation<%> presenter<%>
-         presentation-context<%> current-presentation-context
+         presentation-context<%> presentation-context% current-presentation-context
          presentation-text% presentation-string<%>
          pstring pstring-append pstring-annotate
          presentation-pict-canvas%
