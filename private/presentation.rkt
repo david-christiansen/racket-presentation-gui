@@ -5,7 +5,9 @@
 (require (for-syntax racket/base syntax/parse))
 
 (provide presentation<%> presenter<%>
-         presentation-type? make-presentation-type presentation-type/c
+         presentation-type?
+         make-presentation-type define-presentation-type
+         presentation-type/c
          presentation-has-type?
          presentation-presentation-type presentation-value
          prop:presentation presentation?
@@ -36,6 +38,24 @@
                          (or make-set
                              (slow-set per null))
                          seteq)))
+
+(begin-for-syntax
+  (define-splicing-syntax-class presentation-type-option
+    (pattern (~seq #:equiv? per:expr))
+    (pattern (~seq #:empty-set make-set:expr))))
+
+(define-syntax (define-presentation-type stx)
+  (syntax-parse stx
+    [(_ name:id
+        (~or (~optional (~seq #:equiv? per:expr)
+                        #:defaults ([per #'#f]))
+             (~optional (~seq #:empty-set make-set:expr)
+                        #:defaults ([make-set #'#f])))
+        ...)
+     #'(define name
+         (make-presentation-type 'name
+                                 #:equiv? per
+                                 #:empty-set make-set))]))
 
 (define (presented-object-equal? type v1 v2)
   (define per (presentation-type-per type))

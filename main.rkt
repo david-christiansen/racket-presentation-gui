@@ -20,6 +20,7 @@
          presentation-repl%
          pict-presenter<%>
          make-presentation-type
+         define-presentation-type
          presentation-type?)
 
 ;; Notice
