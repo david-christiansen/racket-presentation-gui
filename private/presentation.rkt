@@ -55,6 +55,16 @@
      #'(define name
          (make-presentation-type 'name
                                  #:equiv? per
+                                 #:empty-set make-set))]
+    [(_ (name:id arg ...)
+        (~or (~optional (~seq #:equiv? per:expr)
+                        #:defaults ([per #'#f]))
+             (~optional (~seq #:empty-set make-set:expr)
+                        #:defaults ([make-set #'#f])))
+        ...)
+     #'(define (name arg ...)
+         (make-presentation-type 'name
+                                 #:equiv? per
                                  #:empty-set make-set))]))
 
 (define (presented-object-equal? type v1 v2)
